@@ -11,6 +11,7 @@ export interface ParseResult {
   success: boolean
   message?: string
   data?: ParseResultData
+  fallbackUrl?: string
 }
 
 export async function parseShareLink(url: string, pwd: string): Promise<ParseResult> {

@@ -70,7 +70,10 @@ export async function parseLanzou(ctx: ParserContext): Promise<ParsedFile> {
   }
 
   if (/acw_sc__v2/i.test(html)) {
-    throw new ParseError('蓝奏云返回了人机验证页面，暂时无法自动解析，请稍后重试')
+    throw new ParseError(
+      '蓝奏云触发了人机验证，服务器无法自动越过，请在新标签页打开原始链接自行下载',
+      url,
+    )
   }
 
   // 旧版兼容：走 sign + ajaxm.php
