@@ -13,6 +13,7 @@ interface ConfigData {
   baiduConfigured: boolean
   baiduUpdatedAt: number | null
   panEnabled: Record<string, boolean>
+  announcement: { content: string; enabled: boolean; updatedAt: number | null }
 }
 
 export default function Admin() {
@@ -24,6 +25,9 @@ export default function Admin() {
   const [stoken, setStoken] = useState('')
   const [stats, setStats] = useState<StatsData | null>(null)
   const [saveMsg, setSaveMsg] = useState('')
+  const [announcementContent, setAnnouncementContent] = useState('')
+  const [announcementEnabled, setAnnouncementEnabled] = useState(false)
+  const [announcementMsg, setAnnouncementMsg] = useState('')
 
   async function loadConfig() {
     const res = await fetch('/api/admin/config')
@@ -35,6 +39,8 @@ export default function Admin() {
     if (json.success && json.data) {
       setAuthed(true)
       setConfig(json.data)
+      setAnnouncementContent(json.data.announcement.content)
+      setAnnouncementEnabled(json.data.announcement.enabled)
     }
   }
 
@@ -72,6 +78,18 @@ export default function Admin() {
       setStoken('')
       loadConfig()
     }
+  }
+
+  async function handleSaveAnnouncement() {
+    setAnnouncementMsg('')
+    const res = await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ announcement: { content: announcementContent, enabled: announcementEnabled } }),
+    })
+    const json = (await res.json()) as { success: boolean; message?: string }
+    setAnnouncementMsg(json.success ? '保存成功 ✓' : json.message ?? '保存失败')
+    if (json.success) loadConfig()
   }
 
   async function togglePan(pan: string, enabled: boolean) {
@@ -160,6 +178,41 @@ export default function Admin() {
           保存
         </button>
         {saveMsg && <span className="ml-3 text-xs text-slate-400">{saveMsg}</span>}
+      </section>
+
+      <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-accent2">公告栏管理</h2>
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            启用
+            <input
+              type="checkbox"
+              checked={announcementEnabled}
+              onChange={(e) => setAnnouncementEnabled(e.target.checked)}
+              className="accent-accent2 w-4 h-4"
+            />
+          </label>
+        </div>
+        <p className="text-xs text-slate-500 mb-3">
+          启用后，访客打开首页会弹窗显示这段内容（除非当天已经关闭过），关闭后会在标题下方保留一行常驻提示。
+          {config?.announcement.updatedAt && (
+            <span className="ml-2 text-slate-600">更新于 {new Date(config.announcement.updatedAt).toLocaleString()}</span>
+          )}
+        </p>
+        <textarea
+          value={announcementContent}
+          onChange={(e) => setAnnouncementContent(e.target.value)}
+          placeholder="填入公告内容，支持换行"
+          rows={4}
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent2 rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4 resize-y"
+        />
+        <button
+          onClick={handleSaveAnnouncement}
+          className="px-4 py-2 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan"
+        >
+          保存
+        </button>
+        {announcementMsg && <span className="ml-3 text-xs text-slate-400">{announcementMsg}</span>}
       </section>
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6">

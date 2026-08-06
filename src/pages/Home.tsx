@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import ParseBox from '../components/ParseBox'
 import AgreementModal from '../components/AgreementModal'
+import Announcement from '../components/Announcement'
 
 const SUPPORTED_PANS = [
   { key: 'lanzou', name: '蓝奏云' },
@@ -21,6 +22,8 @@ export default function Home() {
         </h1>
         <p className="mt-3 text-slate-400 font-mono text-sm">$ 聚合网盘直链解析工具 · 粘贴分享链接即可高速下载</p>
       </header>
+
+      <Announcement />
 
       <div className="w-full max-w-2xl">
         <ParseBox onOpenAgreement={() => setAgreementOpen(true)} />

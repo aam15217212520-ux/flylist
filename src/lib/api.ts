@@ -38,3 +38,18 @@ export async function fetchStats(): Promise<StatsResult> {
   const res = await fetch('/api/stats')
   return res.json()
 }
+
+export interface AnnouncementData {
+  content: string
+  enabled: boolean
+}
+
+export interface AnnouncementResult {
+  success: boolean
+  data?: AnnouncementData
+}
+
+export async function fetchAnnouncement(): Promise<AnnouncementResult> {
+  const res = await fetch('/api/announcement')
+  return res.json()
+}
