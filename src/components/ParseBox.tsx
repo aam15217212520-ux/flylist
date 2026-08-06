@@ -31,7 +31,7 @@ export default function ParseBox({ onOpenAgreement }: Props) {
 
   return (
     <div className="bg-panel border border-accent/20 rounded-lg p-6 shadow-glow font-mono">
-      <label className="block text-xs text-slate-400 mb-1">$ share_url</label>
+      <label className="block text-xs text-slate-400 mb-1">分享链接</label>
       <input
         value={url}
         onChange={(e) => setUrl(e.target.value)}
@@ -39,7 +39,7 @@ export default function ParseBox({ onOpenAgreement }: Props) {
         className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
       />
 
-      <label className="block text-xs text-slate-400 mb-1">$ extract_code (可选)</label>
+      <label className="block text-xs text-slate-400 mb-1">提取码（可选）</label>
       <input
         value={pwd}
         onChange={(e) => setPwd(e.target.value)}
