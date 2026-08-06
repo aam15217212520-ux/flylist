@@ -7,4 +7,4 @@ pages_build_output_dir = "dist"
 # 2. 将下方 id 替换为创建后返回的 id
 [[kv_namespaces]]
 binding = "FLYLIST_KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "4f075d41b6e34deeb0fde7953bdcb820"
