@@ -15,6 +15,12 @@ interface CtFileInfo {
     wait_seconds?: number
     file_name?: string
     file_size?: string
+    message?: string
+    is_vip?: number
+    vip_dx_url?: string
+    vip_yd_url?: string
+    vip_lt_url?: string
+    us_downurl_a?: string
   }
 }
 
@@ -41,6 +47,10 @@ function ctHeaders(shareUrl: string): Record<string, string> {
  * 分享页是纯前端渲染的空壳页面，文件信息和下载直链都来自 webapi.ctfile.com：
  *   1) getfile.php      —— 用 path(单字母路由类型 f/d) + 分享key + 提取码换取 file_id/file_chk/userid
  *   2) get_down_url.php —— 用上面几个字段换取真实下载直链
+ *
+ * 有一种情况不走第2步：文件是"VIP加速文件"（is_vip == 1）时，getfile.php 的响应里
+ * 直接带了加速节点直链（vip_dx_url/vip_yd_url/vip_lt_url/us_downurl_a），要直接用，
+ * 再调 get_down_url.php 反而拿不到东西。
  */
 export async function parseChengtong(ctx: ParserContext): Promise<ParsedFile> {
   const { url, pwd } = ctx
@@ -63,10 +73,10 @@ export async function parseChengtong(ctx: ParserContext): Promise<ParsedFile> {
   const info = await fetchJson<CtFileInfo>(infoUrl, { headers: ctHeaders(url) })
 
   if (info.code === 423) {
-    throw new ParseError('该分享需要提取码，或提取码不正确')
+    throw new ParseError(info.file?.message ?? '该分享需要提取码，或提取码不正确')
   }
-  if (!info.file) {
-    throw new ParseError(info.message ?? '城通网盘分享不存在或已失效')
+  if (!info.file || !info.file.file_id) {
+    throw new ParseError(info.file?.message ?? info.message ?? '城通网盘分享不存在或已失效')
   }
 
   const file = info.file
@@ -75,6 +85,21 @@ export async function parseChengtong(ctx: ParserContext): Promise<ParsedFile> {
 
   if (!uid || !fid || !file.file_chk) {
     throw new ParseError('城通网盘解析失败，下载参数不完整，可能分享已失效或提取码错误')
+  }
+
+  // VIP加速文件：直链已经在这一步的响应里了，不需要（也不能）再走 get_down_url.php
+  if (file.is_vip === 1) {
+    const vipUrl = file.vip_dx_url || file.vip_yd_url || file.vip_lt_url || file.us_downurl_a
+    if (!vipUrl) {
+      throw new ParseError('城通网盘解析失败，该VIP加速文件没有可用的下载节点')
+    }
+    return {
+      panType: 'chengtong',
+      panName: '城通网盘',
+      fileName: file.file_name,
+      fileSize: file.file_size,
+      directLink: vipUrl,
+    }
   }
 
   const downloadUrl =
