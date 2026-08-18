@@ -1,5 +1,5 @@
-import type { Env, ParsedFile } from './parsers/shared/types'
-import { ParseError } from './parsers/shared/types'
+import type { Env, ParsedFile, ParsedFolder } from './parsers/shared/types'
+import { ParseError, isParsedFolder } from './parsers/shared/types'
 import { detectPanType, PAN_NAMES } from './parsers/detect'
 import { parseLanzou } from './parsers/lanzou'
 import { parseChengtong } from './parsers/chengtong'
@@ -45,7 +45,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   try {
-    let result: ParsedFile
+    let result: ParsedFile | ParsedFolder
 
     switch (panType) {
       case 'lanzou':
@@ -66,6 +66,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       case 'quark':
         result = await parseQuark({ env, url: body.url, pwd: body.pwd })
         break
+    }
+
+    if (isParsedFolder(result)) {
+      return Response.json({ success: true, isFolder: true, data: result })
     }
 
     await setCachedLink(env, cacheKey, result.directLink)

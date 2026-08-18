@@ -7,10 +7,26 @@ export interface ParseResultData {
   cacheHit?: boolean
 }
 
+export interface ParseFolderFile {
+  fileId: string
+  fileName: string
+  fileSize?: string
+  url: string
+}
+
+export interface ParseFolderData {
+  panType: string
+  panName: string
+  folderName?: string
+  files: ParseFolderFile[]
+}
+
 export interface ParseResult {
   success: boolean
   message?: string
   data?: ParseResultData
+  isFolder?: boolean
+  folder?: ParseFolderData
   fallbackUrl?: string
 }
 
@@ -20,7 +36,11 @@ export async function parseShareLink(url: string, pwd: string): Promise<ParseRes
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url, pwd }),
   })
-  return res.json()
+  const json = await res.json()
+  if (json.isFolder) {
+    return { success: true, isFolder: true, folder: json.data }
+  }
+  return json
 }
 
 export interface StatsData {

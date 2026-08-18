@@ -1,5 +1,5 @@
 import { DEFAULT_UA } from './shared/http'
-import type { ParsedFile, ParserContext } from './shared/types'
+import type { ParsedFile, ParsedFolder, ParserContext } from './shared/types'
 import { ParseError } from './shared/types'
 
 // ---- 阿里云WAF人机验证(acw_sc__v2)：置换 + 异或，纯计算即可复现，不需要跑浏览器 ----
@@ -167,13 +167,95 @@ async function followIntermediateUrl(downUrl: string): Promise<string> {
   throw new ParseError('蓝奏云下载域未返回直链，请稍后重试', downUrl)
 }
 
-export async function parseLanzou(ctx: ParserContext): Promise<ParsedFile> {
+/** 文件夹/列表分享页的签名参数都是映射到一个混淆变量名上的，需要再去找那个变量的实际值 */
+function resolveVarValue(html: string, dataKey: string): string | null {
+  const varNameMatch = html.match(new RegExp(`'${dataKey}'\\s*:\\s*(\\w+)`))
+  if (!varNameMatch) return null
+  const valueMatch = html.match(new RegExp(`var\\s+${varNameMatch[1]}\\s*=\\s*'([^']+)'`))
+  return valueMatch ? valueMatch[1] : null
+}
+
+interface FolderAjaxItem {
+  id: string
+  name_all: string
+  size: string
+  t: number
+}
+
+async function parseLanzouFolder(html: string, shareUrl: string, origin: string, pwd?: string): Promise<ParsedFolder> {
+  const fileMatch = html.match(/filemoreajax\.php\?file=(\d+)/)
+  if (!fileMatch) {
+    throw new ParseError('未能识别蓝奏云文件夹分享页结构，页面可能已更新')
+  }
+  const fid = fileMatch[1]
+
+  const uidMatch = html.match(/'uid'\s*:\s*'([^']+)'/)
+  const puidMatch = html.match(/'puid'\s*:\s*'([^']+)'/)
+  const tValue = resolveVarValue(html, 't')
+  const kValue = resolveVarValue(html, 'k')
+
+  if (!uidMatch || !puidMatch || !tValue || !kValue) {
+    throw new ParseError('未能从蓝奏云文件夹分享页提取必要参数')
+  }
+
+  const titleMatch = html.match(/<title>([^<]*)<\/title>/)
+  const folderName = titleMatch ? titleMatch[1] : undefined
+
+  const files: ParsedFolder['files'] = []
+  for (let page = 1; page <= 10; page++) {
+    const form: Record<string, string> = {
+      lx: '2',
+      fid,
+      uid: uidMatch[1],
+      puid: puidMatch[1],
+      pg: String(page),
+      rep: '0',
+      t: tValue,
+      k: kValue,
+      up: '1',
+      ls: '1',
+      pwd: pwd ?? '',
+    }
+    const respText = await postBypassWaf(`${origin}/filemoreajax.php?file=${fid}`, form, { Referer: shareUrl })
+    const json = parseLzJson(respText) as { zt?: number; info?: string; text?: FolderAjaxItem[] } | null
+
+    if (!json) throw new ParseError('蓝奏云文件夹解析失败，返回数据异常')
+    if (json.zt === 3) throw new ParseError(pwd ? '提取码错误' : '该文件夹分享需要提取码')
+    if (json.zt === 2) break
+    if (json.zt === 6) throw new ParseError(json.info ?? '该文件夹分享暂不可用')
+    if (json.zt !== 1 || !json.text) throw new ParseError(json.info ?? '蓝奏云文件夹解析失败')
+
+    for (const item of json.text) {
+      if (!item.id || item.id === '-1') continue
+      files.push({ fileId: item.id, fileName: item.name_all, fileSize: item.size, url: `${origin}/${item.id}` })
+    }
+
+    if (json.text.length < 50) break
+  }
+
+  if (!files.length) {
+    throw new ParseError('该文件夹分享没有可用文件')
+  }
+
+  return { panType: 'lanzou', panName: '蓝奏云', folderName, files }
+}
+
+export async function parseLanzou(ctx: ParserContext): Promise<ParsedFile | ParsedFolder> {
   const { url, pwd } = ctx
   const origin = new URL(url).origin
 
   let { html } = await getBypassWaf(url, { Referer: origin })
 
-  // 部分分享用 iframe 包了一层，真正的下载信息在 iframe 里
+  // 文件夹/列表分享页和单文件分享页结构完全不一样，单独处理
+  if (/filemoreajax\.php\?file=\d+/.test(html)) {
+    return parseLanzouFolder(html, url, origin, pwd)
+  }
+
+  // 部分分享用 iframe 包了一层，真正的下载信息在 iframe 里；文件名在外层标题里，
+  // 要在 html 被 iframe 内容覆盖前先取出来
+  const outerTitleMatch = html.match(/<title>([^<]*)<\/title>/)
+  const fileName = outerTitleMatch ? outerTitleMatch[1].replace(/\s*-\s*蓝奏云\s*$/, '') : undefined
+
   const iframeMatch = html.match(/src\s*=\s*["'](\/fn\?[^"'\s>]+)["']/i)
   if (iframeMatch) {
     const iframeUrl = origin + iframeMatch[1]
@@ -207,7 +289,7 @@ export async function parseLanzou(ctx: ParserContext): Promise<ParsedFile> {
 
   try {
     const directLink = await followIntermediateUrl(intermediateUrl)
-    return { panType: 'lanzou', panName: '蓝奏云', fileName: ajaxJson.inf, directLink }
+    return { panType: 'lanzou', panName: '蓝奏云', fileName, directLink }
   } catch (error) {
     if (error instanceof ParseError) throw error
     // 服务器端没能拿到最终直链时，把中间跳转地址交给访客的浏览器自己完成（浏览器能跑JS，大概率能过）

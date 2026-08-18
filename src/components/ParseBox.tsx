@@ -15,18 +15,26 @@ export default function ParseBox({ onOpenAgreement }: Props) {
 
   const canSubmit = agreed && url.trim().length > 0 && !loading
 
-  async function handleSubmit() {
-    if (!canSubmit) return
+  async function runParse(targetUrl: string, targetPwd: string) {
     setLoading(true)
     setResult(null)
     try {
-      const res = await parseShareLink(url.trim(), pwd.trim())
+      const res = await parseShareLink(targetUrl, targetPwd)
       setResult(res)
     } catch {
       setResult({ success: false, message: '网络异常，请稍后重试' })
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleSubmit() {
+    if (!canSubmit) return
+    await runParse(url.trim(), pwd.trim())
+  }
+
+  async function handleSelectFolderFile(fileUrl: string) {
+    await runParse(fileUrl, pwd.trim())
   }
 
   return (
@@ -75,7 +83,7 @@ export default function ParseBox({ onOpenAgreement }: Props) {
         {loading ? '解析中...' : '开始解析 ⚡'}
       </button>
 
-      {result && <ResultCard result={result} />}
+      {result && <ResultCard result={result} onSelectFolderFile={handleSelectFolderFile} />}
     </div>
   )
 }
