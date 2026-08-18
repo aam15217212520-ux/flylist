@@ -1,4 +1,4 @@
-export type PanType = 'lanzou' | 'chengtong' | 'feiji' | 'pan123' | 'baidu'
+export type PanType = 'lanzou' | 'chengtong' | 'feiji' | 'pan123' | 'baidu' | 'quark'
 
 const HOST_RULES: Array<{ type: PanType; test: RegExp }> = [
   { type: 'lanzou', test: /lanzo[a-z]{1,3}\.(com|net|org|space)/i },
@@ -6,6 +6,7 @@ const HOST_RULES: Array<{ type: PanType; test: RegExp }> = [
   { type: 'feiji', test: /feijipan\.com|feijix\.com/i },
   { type: 'pan123', test: /123pan\.(com|cn)|123684\.com|123865\.com|123912\.com/i },
   { type: 'baidu', test: /pan\.baidu\.com|yun\.baidu\.com/i },
+  { type: 'quark', test: /pan\.quark\.cn/i },
 ]
 
 export function detectPanType(url: string): PanType | null {
@@ -26,4 +27,5 @@ export const PAN_NAMES: Record<PanType, string> = {
   feiji: '小飞机网盘',
   pan123: '123云盘',
   baidu: '百度网盘',
+  quark: '夸克网盘',
 }

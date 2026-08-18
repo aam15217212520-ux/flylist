@@ -9,11 +9,13 @@ const DEFAULT_PAN_ENABLED: Record<string, boolean> = {
   feiji: true,
   pan123: true,
   baidu: true,
+  quark: true,
 }
 
 interface ConfigUpdateBody {
   bduss?: string
   stoken?: string
+  quarkCookie?: string
   panEnabled?: Record<string, boolean>
   announcement?: { content: string; enabled: boolean }
 }
@@ -28,6 +30,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     data: {
       baiduConfigured: Boolean(config.baidu?.bduss),
       baiduUpdatedAt: config.baidu?.updatedAt ?? null,
+      quarkConfigured: Boolean(config.quark?.cookie),
+      quarkUpdatedAt: config.quark?.updatedAt ?? null,
       panEnabled: { ...DEFAULT_PAN_ENABLED, ...(config.panEnabled ?? {}) },
       announcement: {
         content: config.announcement?.content ?? '',
@@ -51,6 +55,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     config.baidu = {
       bduss: body.bduss,
       stoken: body.stoken ?? config.baidu?.stoken ?? '',
+      updatedAt: Date.now(),
+    }
+  }
+
+  if (body.quarkCookie) {
+    config.quark = {
+      cookie: body.quarkCookie,
       updatedAt: Date.now(),
     }
   }

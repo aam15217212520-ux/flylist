@@ -9,6 +9,7 @@ const SUPPORTED_PANS = [
   { key: 'feiji', name: '小飞机网盘' },
   { key: 'pan123', name: '123云盘' },
   { key: 'baidu', name: '百度网盘 · SVIP加速' },
+  { key: 'quark', name: '夸克网盘' },
 ]
 
 export default function Home() {

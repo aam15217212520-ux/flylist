@@ -6,6 +6,7 @@ import { parseChengtong } from './parsers/chengtong'
 import { parseFeiji } from './parsers/feiji'
 import { parsePan123 } from './parsers/pan123'
 import { parseBaidu } from './parsers/baidu'
+import { parseQuark } from './parsers/quark'
 import { getCachedLink, setCachedLink } from './parsers/shared/cache'
 import { incrementStats } from './parsers/shared/stats'
 import { getSiteConfig } from './parsers/shared/config'
@@ -61,6 +62,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         break
       case 'baidu':
         result = await parseBaidu({ env, url: body.url, pwd: body.pwd })
+        break
+      case 'quark':
+        result = await parseQuark({ env, url: body.url, pwd: body.pwd })
         break
     }
 

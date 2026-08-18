@@ -8,6 +8,7 @@ export interface AnnouncementConfig {
 
 export interface SiteConfig {
   baidu?: { bduss: string; stoken: string; updatedAt: number }
+  quark?: { cookie: string; updatedAt: number }
   panEnabled?: Record<string, boolean>
   announcement?: AnnouncementConfig
 }

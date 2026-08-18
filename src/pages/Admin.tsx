@@ -7,11 +7,14 @@ const PAN_LABELS: Record<string, string> = {
   feiji: '小飞机网盘',
   pan123: '123云盘',
   baidu: '百度网盘',
+  quark: '夸克网盘',
 }
 
 interface ConfigData {
   baiduConfigured: boolean
   baiduUpdatedAt: number | null
+  quarkConfigured: boolean
+  quarkUpdatedAt: number | null
   panEnabled: Record<string, boolean>
   announcement: { content: string; enabled: boolean; updatedAt: number | null }
 }
@@ -23,6 +26,8 @@ export default function Admin() {
   const [config, setConfig] = useState<ConfigData | null>(null)
   const [bduss, setBduss] = useState('')
   const [stoken, setStoken] = useState('')
+  const [quarkCookie, setQuarkCookie] = useState('')
+  const [quarkMsg, setQuarkMsg] = useState('')
   const [stats, setStats] = useState<StatsData | null>(null)
   const [saveMsg, setSaveMsg] = useState('')
   const [announcementContent, setAnnouncementContent] = useState('')
@@ -76,6 +81,21 @@ export default function Admin() {
     if (json.success) {
       setBduss('')
       setStoken('')
+      loadConfig()
+    }
+  }
+
+  async function handleSaveQuark() {
+    setQuarkMsg('')
+    const res = await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quarkCookie }),
+    })
+    const json = (await res.json()) as { success: boolean; message?: string }
+    setQuarkMsg(json.success ? '保存成功 ✓' : json.message ?? '保存失败')
+    if (json.success) {
+      setQuarkCookie('')
       loadConfig()
     }
   }
@@ -178,6 +198,28 @@ export default function Admin() {
           保存
         </button>
         {saveMsg && <span className="ml-3 text-xs text-slate-400">{saveMsg}</span>}
+      </section>
+
+      <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
+        <h2 className="text-accent2 mb-1">夸克网盘账号配置</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          当前状态：
+          {config?.quarkConfigured ? <span className="text-accent"> 已配置 ✓</span> : <span className="text-warn"> 未配置</span>}
+          {config?.quarkUpdatedAt && (
+            <span className="ml-2 text-slate-600">更新于 {new Date(config.quarkUpdatedAt).toLocaleString()}</span>
+          )}
+        </p>
+        <label className="block text-xs text-slate-400 mb-1">Cookie（从浏览器登录 pan.quark.cn 后抓取完整 Cookie 字符串）</label>
+        <input
+          value={quarkCookie}
+          onChange={(e) => setQuarkCookie(e.target.value)}
+          placeholder="留空则不修改"
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
+        />
+        <button onClick={handleSaveQuark} className="px-4 py-2 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan">
+          保存
+        </button>
+        {quarkMsg && <span className="ml-3 text-xs text-slate-400">{quarkMsg}</span>}
       </section>
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
