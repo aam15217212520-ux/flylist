@@ -18,6 +18,7 @@ interface ConfigUpdateBody {
   panEnabled?: Record<string, boolean>
   announcement?: { content: string; enabled: boolean }
   addBaiduAccount?: { bduss: string; note?: string }
+  editBaiduAccount?: { id: string; bduss?: string; note?: string }
   removeBaiduAccountId?: string
   setBaiduAccountStatus?: { id: string; status: 'normal' | 'disabled' }
 }
@@ -81,6 +82,24 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (body.removeBaiduAccountId) {
     config.baiduAccounts = (config.baiduAccounts ?? []).filter((a) => a.id !== body.removeBaiduAccountId)
+  }
+
+  if (body.editBaiduAccount) {
+    const { id, bduss, note } = body.editBaiduAccount
+    const accounts = config.baiduAccounts ?? []
+    const account = accounts.find((a) => a.id === id)
+    if (account) {
+      if (bduss) {
+        // BDUSS 变了，说明账号被重新登录过，之前的失效状态和转存目录缓存都要重置
+        account.bduss = bduss
+        account.status = 'normal'
+        account.lastError = undefined
+        account.dirReady = false
+      }
+      if (note !== undefined) {
+        account.note = note
+      }
+    }
   }
 
   if (body.setBaiduAccountStatus) {

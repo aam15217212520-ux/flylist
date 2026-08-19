@@ -36,6 +36,9 @@ export default function Admin() {
   const [newBduss, setNewBduss] = useState('')
   const [newBdussNote, setNewBdussNote] = useState('')
   const [baiduMsg, setBaiduMsg] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editBduss, setEditBduss] = useState('')
+  const [editNote, setEditNote] = useState('')
   const [quarkCookie, setQuarkCookie] = useState('')
   const [quarkMsg, setQuarkMsg] = useState('')
   const [stats, setStats] = useState<StatsData | null>(null)
@@ -113,6 +116,34 @@ export default function Admin() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ setBaiduAccountStatus: { id, status } }),
     })
+    loadConfig()
+  }
+
+  function startEditBaiduAccount(acc: BaiduAccountView) {
+    setEditingId(acc.id)
+    setEditBduss('')
+    setEditNote(acc.note)
+  }
+
+  function cancelEditBaiduAccount() {
+    setEditingId(null)
+    setEditBduss('')
+    setEditNote('')
+  }
+
+  async function handleSaveEditBaiduAccount(id: string) {
+    await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        editBaiduAccount: {
+          id,
+          bduss: editBduss.trim() || undefined,
+          note: editNote.trim(),
+        },
+      }),
+    })
+    cancelEditBaiduAccount()
     loadConfig()
   }
 
@@ -211,38 +242,70 @@ export default function Admin() {
         {config && config.baiduAccounts.length > 0 && (
           <div className="space-y-2 mb-4">
             {config.baiduAccounts.map((acc) => (
-              <div key={acc.id} className="flex items-center justify-between bg-black/30 border border-slate-700 rounded px-3 py-2">
-                <div className="text-xs">
-                  <p className="text-slate-300">
-                    {acc.note ? `${acc.note} · ` : ''}
-                    <span className="text-slate-500">{acc.bdussMasked}</span>
-                  </p>
-                  <p className="text-slate-600 mt-0.5">
-                    {acc.status === 'normal' ? <span className="text-accent">正常</span> : <span className="text-warn">已失效</span>}
-                    {acc.lastUsedAt > 0 && <span className="ml-2">上次使用 {new Date(acc.lastUsedAt).toLocaleString()}</span>}
-                    {acc.lastError && <span className="ml-2 text-warn">{acc.lastError}</span>}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {acc.status === 'normal' ? (
+              <div key={acc.id} className="bg-black/30 border border-slate-700 rounded px-3 py-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs">
+                    <p className="text-slate-300">
+                      {acc.note ? `${acc.note} · ` : ''}
+                      <span className="text-slate-500">{acc.bdussMasked}</span>
+                    </p>
+                    <p className="text-slate-600 mt-0.5">
+                      {acc.status === 'normal' ? <span className="text-accent">正常</span> : <span className="text-warn">已失效</span>}
+                      {acc.lastUsedAt > 0 && <span className="ml-2">上次使用 {new Date(acc.lastUsedAt).toLocaleString()}</span>}
+                      {acc.lastError && <span className="ml-2 text-warn">{acc.lastError}</span>}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {acc.status === 'normal' ? (
+                      <button
+                        onClick={() => handleSetBaiduAccountStatus(acc.id, 'disabled')}
+                        className="text-xs text-slate-500 hover:text-warn"
+                      >
+                        停用
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleSetBaiduAccountStatus(acc.id, 'normal')}
+                        className="text-xs text-slate-500 hover:text-accent"
+                      >
+                        恢复
+                      </button>
+                    )}
                     <button
-                      onClick={() => handleSetBaiduAccountStatus(acc.id, 'disabled')}
-                      className="text-xs text-slate-500 hover:text-warn"
+                      onClick={() => (editingId === acc.id ? cancelEditBaiduAccount() : startEditBaiduAccount(acc))}
+                      className="text-xs text-slate-500 hover:text-accent2"
                     >
-                      停用
+                      {editingId === acc.id ? '取消' : '修改'}
                     </button>
-                  ) : (
-                    <button
-                      onClick={() => handleSetBaiduAccountStatus(acc.id, 'normal')}
-                      className="text-xs text-slate-500 hover:text-accent"
-                    >
-                      恢复
+                    <button onClick={() => handleRemoveBaiduAccount(acc.id)} className="text-xs text-slate-500 hover:text-warn">
+                      删除
                     </button>
-                  )}
-                  <button onClick={() => handleRemoveBaiduAccount(acc.id)} className="text-xs text-slate-500 hover:text-warn">
-                    删除
-                  </button>
+                  </div>
                 </div>
+
+                {editingId === acc.id && (
+                  <div className="mt-3 pt-3 border-t border-slate-700">
+                    <label className="block text-xs text-slate-400 mb-1">新 BDUSS（留空则不修改，只改备注）</label>
+                    <input
+                      value={editBduss}
+                      onChange={(e) => setEditBduss(e.target.value)}
+                      placeholder="重新登录后抓取的 BDUSS，用于替换失效账号"
+                      className="w-full bg-black/40 border border-slate-700 focus:border-accent2 rounded px-3 py-2 text-sm outline-none text-slate-200 mb-2"
+                    />
+                    <label className="block text-xs text-slate-400 mb-1">备注</label>
+                    <input
+                      value={editNote}
+                      onChange={(e) => setEditNote(e.target.value)}
+                      className="w-full bg-black/40 border border-slate-700 focus:border-accent2 rounded px-3 py-2 text-sm outline-none text-slate-200 mb-2"
+                    />
+                    <button
+                      onClick={() => handleSaveEditBaiduAccount(acc.id)}
+                      className="px-3 py-1.5 rounded bg-accent2 text-black text-xs font-bold hover:shadow-glowCyan"
+                    >
+                      保存修改
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
