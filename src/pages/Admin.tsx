@@ -12,7 +12,7 @@ const PAN_LABELS: Record<string, string> = {
 
 interface BaiduAccountView {
   id: string
-  bdussMasked: string
+  cookieMasked: string
   note: string
   status: 'normal' | 'disabled'
   lastUsedAt: number
@@ -33,11 +33,11 @@ export default function Admin() {
   const [password, setPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [config, setConfig] = useState<ConfigData | null>(null)
-  const [newBduss, setNewBduss] = useState('')
-  const [newBdussNote, setNewBdussNote] = useState('')
+  const [newCookie, setNewCookie] = useState('')
+  const [newCookieNote, setNewCookieNote] = useState('')
   const [baiduMsg, setBaiduMsg] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editBduss, setEditBduss] = useState('')
+  const [editCookie, setEditCookie] = useState('')
   const [editNote, setEditNote] = useState('')
   const [quarkCookie, setQuarkCookie] = useState('')
   const [quarkMsg, setQuarkMsg] = useState('')
@@ -83,20 +83,20 @@ export default function Admin() {
 
   async function handleAddBaiduAccount() {
     setBaiduMsg('')
-    if (!newBduss.trim()) {
-      setBaiduMsg('请输入 BDUSS')
+    if (!newCookie.trim()) {
+      setBaiduMsg('请输入 Cookie')
       return
     }
     const res = await fetch('/api/admin/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ addBaiduAccount: { bduss: newBduss.trim(), note: newBdussNote.trim() } }),
+      body: JSON.stringify({ addBaiduAccount: { cookie: newCookie.trim(), note: newCookieNote.trim() } }),
     })
     const json = (await res.json()) as { success: boolean; message?: string }
     setBaiduMsg(json.success ? '添加成功 ✓' : json.message ?? '添加失败')
     if (json.success) {
-      setNewBduss('')
-      setNewBdussNote('')
+      setNewCookie('')
+      setNewCookieNote('')
       loadConfig()
     }
   }
@@ -121,13 +121,13 @@ export default function Admin() {
 
   function startEditBaiduAccount(acc: BaiduAccountView) {
     setEditingId(acc.id)
-    setEditBduss('')
+    setEditCookie('')
     setEditNote(acc.note)
   }
 
   function cancelEditBaiduAccount() {
     setEditingId(null)
-    setEditBduss('')
+    setEditCookie('')
     setEditNote('')
   }
 
@@ -138,7 +138,7 @@ export default function Admin() {
       body: JSON.stringify({
         editBaiduAccount: {
           id,
-          bduss: editBduss.trim() || undefined,
+          cookie: editCookie.trim() || undefined,
           note: editNote.trim(),
         },
       }),
@@ -247,7 +247,7 @@ export default function Admin() {
                   <div className="text-xs">
                     <p className="text-slate-300">
                       {acc.note ? `${acc.note} · ` : ''}
-                      <span className="text-slate-500">{acc.bdussMasked}</span>
+                      <span className="text-slate-500">{acc.cookieMasked}</span>
                     </p>
                     <p className="text-slate-600 mt-0.5">
                       {acc.status === 'normal' ? <span className="text-accent">正常</span> : <span className="text-warn">已失效</span>}
@@ -285,11 +285,11 @@ export default function Admin() {
 
                 {editingId === acc.id && (
                   <div className="mt-3 pt-3 border-t border-slate-700">
-                    <label className="block text-xs text-slate-400 mb-1">新 BDUSS（留空则不修改，只改备注）</label>
+                    <label className="block text-xs text-slate-400 mb-1">新 Cookie（留空则不修改，只改备注）</label>
                     <input
-                      value={editBduss}
-                      onChange={(e) => setEditBduss(e.target.value)}
-                      placeholder="重新登录后抓取的 BDUSS，用于替换失效账号"
+                      value={editCookie}
+                      onChange={(e) => setEditCookie(e.target.value)}
+                      placeholder="重新登录后抓取的完整 Cookie，用于替换失效账号"
                       className="w-full bg-black/40 border border-slate-700 focus:border-accent2 rounded px-3 py-2 text-sm outline-none text-slate-200 mb-2"
                     />
                     <label className="block text-xs text-slate-400 mb-1">备注</label>
@@ -311,17 +311,17 @@ export default function Admin() {
           </div>
         )}
 
-        <label className="block text-xs text-slate-400 mb-1">新增账号 BDUSS</label>
+        <label className="block text-xs text-slate-400 mb-1">新增账号：完整 Cookie</label>
         <input
-          value={newBduss}
-          onChange={(e) => setNewBduss(e.target.value)}
-          placeholder="从浏览器登录 pan.baidu.com 后抓取 Cookie 中的 BDUSS 字段"
+          value={newCookie}
+          onChange={(e) => setNewCookie(e.target.value)}
+          placeholder="从浏览器登录 pan.baidu.com 后，开发者工具里抓取完整 Cookie 请求头（包含 BAIDUID、BDUSS 等），单独 BDUSS 不够用"
           className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-3"
         />
         <label className="block text-xs text-slate-400 mb-1">备注（可选，方便辨认账号）</label>
         <input
-          value={newBdussNote}
-          onChange={(e) => setNewBdussNote(e.target.value)}
+          value={newCookieNote}
+          onChange={(e) => setNewCookieNote(e.target.value)}
           placeholder="例如：账号1 / SVIP7"
           className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
         />

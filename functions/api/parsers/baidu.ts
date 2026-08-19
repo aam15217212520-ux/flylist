@@ -91,7 +91,10 @@ function extractSurl(url: string): string | null {
 }
 
 function accountCookie(account: BaiduAccount): string {
-  return `BDUSS=${account.bduss};`
+  // 兼容旧数据：若没有存过完整 Cookie（不包含 '=' 多对的情况下），尝试当作纯BDUSS使用（效果有限，建议重新保存为完整 Cookie）
+  const raw = account.cookie.trim()
+  if (raw.includes('BDUSS=')) return raw.endsWith(';') ? raw : `${raw};`
+  return `BDUSS=${raw};`
 }
 
 /**

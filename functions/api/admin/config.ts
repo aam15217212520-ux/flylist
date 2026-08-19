@@ -17,18 +17,18 @@ interface ConfigUpdateBody {
   quarkCookie?: string
   panEnabled?: Record<string, boolean>
   announcement?: { content: string; enabled: boolean }
-  addBaiduAccount?: { bduss: string; note?: string }
-  editBaiduAccount?: { id: string; bduss?: string; note?: string }
+  addBaiduAccount?: { cookie: string; note?: string }
+  editBaiduAccount?: { id: string; cookie?: string; note?: string }
   removeBaiduAccountId?: string
   setBaiduAccountStatus?: { id: string; status: 'normal' | 'disabled' }
 }
 
 function publicAccount(account: BaiduAccount) {
-  // 出于安全考虑，永远不把完整 BDUSS 明文回传给前端，只回传末尾几位用于辨认
-  const masked = account.bduss.length > 6 ? `${'*'.repeat(account.bduss.length - 6)}${account.bduss.slice(-6)}` : '******'
+  // 出于安全考虑，永远不把完整 Cookie 明文回传给前端，只回传末尾几位用于辨认
+  const masked = account.cookie.length > 6 ? `${'*'.repeat(account.cookie.length - 6)}${account.cookie.slice(-6)}` : '******'
   return {
     id: account.id,
-    bdussMasked: masked,
+    cookieMasked: masked,
     note: account.note ?? '',
     status: account.status,
     lastUsedAt: account.lastUsedAt,
@@ -67,11 +67,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const config = await getSiteConfig(env)
 
-  if (body.addBaiduAccount?.bduss) {
+  if (body.addBaiduAccount?.cookie) {
     const accounts = config.baiduAccounts ?? []
     const newAccount: BaiduAccount = {
       id: crypto.randomUUID(),
-      bduss: body.addBaiduAccount.bduss,
+      cookie: body.addBaiduAccount.cookie,
       note: body.addBaiduAccount.note ?? '',
       status: 'normal',
       lastUsedAt: 0,
@@ -85,13 +85,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   if (body.editBaiduAccount) {
-    const { id, bduss, note } = body.editBaiduAccount
+    const { id, cookie, note } = body.editBaiduAccount
     const accounts = config.baiduAccounts ?? []
     const account = accounts.find((a) => a.id === id)
     if (account) {
-      if (bduss) {
-        // BDUSS 变了，说明账号被重新登录过，之前的失效状态和转存目录缓存都要重置
-        account.bduss = bduss
+      if (cookie) {
+        // Cookie 变了，说明账号被重新登录过，之前的失效状态和转存目录缓存都要重置
+        account.cookie = cookie
         account.status = 'normal'
         account.lastError = undefined
         account.dirReady = false

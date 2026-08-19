@@ -10,7 +10,10 @@ export interface AnnouncementConfig {
  * 直到管理员在后台手动重新启用（比如确认账号已恢复正常后）。 */
 export interface BaiduAccount {
   id: string
-  bduss: string
+  /** 完整 Cookie 字符串（包含 BAIDUID/BDUSS 等）。
+   * 注意：单独的 BDUSS 不够用，百度网盘自己管理域的接口（gettemplatevariable/api/list 等）
+   * 需要 BAIDUID 与 BDUSS 搭配才会认为已登录，否则会被判定为匿名访客（errno -6）。 */
+  cookie: string
   note?: string
   status: 'normal' | 'disabled'
   lastUsedAt: number
