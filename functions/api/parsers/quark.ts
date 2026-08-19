@@ -1,5 +1,5 @@
 import { fetchJson } from './shared/http'
-import type { ParsedFile, ParserContext } from './shared/types'
+import type { ParsedFile, ParsedFolder, ParserContext } from './shared/types'
 import { ParseError } from './shared/types'
 import { getSiteConfig } from './shared/config'
 
@@ -49,8 +49,10 @@ interface DownloadResp {
  * 夸克网盘解析。夸克官方接口要求登录态，必须由管理员在后台配置一个夸克账号的
  * Cookie，访客借用这个 Cookie 完成解析（跟百度网盘同一个模式）。
  * 仅支持普通分享直链，超出分享直链限制、需要转存到网盘再下载的大文件场景暂不支持。
+ * 分享如果是文件夹（或包含子文件夹），返回文件列表供访客逐级选择，跟百度网盘同一个模式，
+ * 通过 URL 上的 __qdir 参数记录当前浏览的目录 fid。
  */
-export async function parseQuark(ctx: ParserContext): Promise<ParsedFile> {
+export async function parseQuark(ctx: ParserContext): Promise<ParsedFile | ParsedFolder> {
   const { url, pwd, env } = ctx
   const config = await getSiteConfig(env)
   const cookie = config.quark?.cookie
@@ -65,6 +67,13 @@ export async function parseQuark(ctx: ParserContext): Promise<ParsedFile> {
   }
   const pwdId = pwdIdMatch[1]
   const headers = quarkHeaders(cookie)
+
+  let pdirFid = '0'
+  try {
+    pdirFid = new URL(url).searchParams.get('__qdir') || '0'
+  } catch {
+    // 忽略，按根目录处理
+  }
 
   const tokenRes = await fetchJson<TokenResp>(`${API_BASE}/share/sharepage/token?pr=ucpro&fr=pc`, {
     method: 'POST',
@@ -81,16 +90,71 @@ export async function parseQuark(ctx: ParserContext): Promise<ParsedFile> {
 
   const detailUrl =
     `${API_BASE}/share/sharepage/detail?pr=ucpro&fr=pc&pwd_id=${pwdId}&stoken=${encodeURIComponent(stoken)}` +
-    `&pdir_fid=0&force=0&_page=1&_size=50&_fetch_banner=1&_fetch_share=1&_fetch_total=1&_sort=file_type:asc,updated_at:desc`
+    `&pdir_fid=${pdirFid}&force=0&_page=1&_size=50&_fetch_banner=1&_fetch_share=1&_fetch_total=1&_sort=file_type:asc,updated_at:desc`
   const detailRes = await fetchJson<DetailResp>(detailUrl, { headers })
 
-  const files = (detailRes.data?.list ?? []).filter((item) => item.file || item.obj_category)
-  if (detailRes.code !== 0 || !files.length) {
-    throw new ParseError(detailRes.message ?? '该分享暂无可直接下载的文件（可能是空分享或纯文件夹分享）')
+  const items = detailRes.data?.list ?? []
+  if (detailRes.code !== 0) {
+    throw new ParseError(detailRes.message ?? '夸克网盘获取分享内容失败，链接可能已失效或提取码不正确')
+  }
+  if (!items.length) {
+    throw new ParseError('该分享目录下没有文件')
   }
 
-  const file = files[0]
+  const files = items.filter((item) => item.file)
+  const folders = items.filter((item) => !item.file)
 
+  // 根目录且只有单个文件、没有子文件夹：直接返回直链，不需要访客再多点一次
+  if (pdirFid === '0' && files.length === 1 && folders.length === 0) {
+    return await resolveQuarkDownload(headers, pwdId, stoken, files[0])
+  }
+
+  const folderItems: ParsedFolder['files'] = []
+  for (const item of folders) {
+    folderItems.push({
+      fileId: `dir-${item.fid}`,
+      fileName: `📁 ${item.file_name}`,
+      url: `https://pan.quark.cn/s/${pwdId}?__qdir=${item.fid}`,
+    })
+  }
+  for (const item of files) {
+    folderItems.push({
+      fileId: item.fid,
+      fileName: item.file_name,
+      fileSize: item.size ? String(item.size) : undefined,
+      url: `https://pan.quark.cn/s/${pwdId}?__qdir=${pdirFid}&__qfid=${item.fid}`,
+    })
+  }
+
+  // 访客点了某个具体文件（而不是目录）：直接解析该文件的下载直链
+  const qfid = (() => {
+    try {
+      return new URL(url).searchParams.get('__qfid')
+    } catch {
+      return null
+    }
+  })()
+  if (qfid) {
+    const target = files.find((item) => item.fid === qfid)
+    if (!target) {
+      throw new ParseError('未找到该文件，链接可能已失效')
+    }
+    return await resolveQuarkDownload(headers, pwdId, stoken, target)
+  }
+
+  return {
+    panType: 'quark',
+    panName: '夸克网盘',
+    files: folderItems,
+  }
+}
+
+async function resolveQuarkDownload(
+  headers: Record<string, string>,
+  pwdId: string,
+  stoken: string,
+  file: QuarkFileItem,
+): Promise<ParsedFile> {
   const downloadRes = await fetchJson<DownloadResp>(`${API_BASE}/file/download?pr=ucpro&fr=pc`, {
     method: 'POST',
     headers,
