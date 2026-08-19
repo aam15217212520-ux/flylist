@@ -70,7 +70,7 @@ npm run dev
 | 城通网盘 | 中 | uid/fid 提取正则可能需要对照最新分享页源码调整 |
 | 小飞机网盘 | 较低 | 服务较新，接口路径基于合理推测实现，上线后需要用真实分享链接验证，如有出入需要重新抓包 `functions/api/parsers/feiji.ts` |
 | 123云盘 | 中高 | 公开分享接口结构相对稳定，但仅覆盖普通文件，大文件/登录态场景未实现 |
-| 百度网盘 | 中 | 采用"复用分享页内联 `window.yunData` 中官方计算好的 sign/timestamp"思路，避免自行还原签名算法，但百度页面结构调整时需要同步更新 `functions/api/parsers/baidu.ts` |
+| 百度网盘 | 中高 | 采用官方微信端接口 `share/wxlist`（列表）+ `share/tplconfig`（签名）+ `api/sharedownload`（下载，需附带 `sekey`）三步获取直链，不依赖分享页 HTML 结构，支持文件夹分享，思路参考自 94list / HkList / baiduwp-php 等开源实现 |
 
 **建议**：部署后先用几个真实分享链接逐个网盘测试，任何一个解析失败都可以把报错信息发我，我们针对性修正对应 parser 文件即可，不影响其他网盘。
 
