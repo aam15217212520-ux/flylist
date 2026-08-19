@@ -118,3 +118,15 @@ export async function parseQuark(ctx: ParserContext): Promise<ParsedFile> {
     directLink,
   }
 }
+
+/**
+ * 夸克网盘的下载直链只有携带账号登录 Cookie 才能访问，不能直接交给用户浏览器，
+ * 因此包装成走服务端代理下载的地址，Cookie 全程留在服务端，不会暴露给访客。
+ */
+export function buildQuarkProxyLink(rawDirectLink: string, fileName?: string): string {
+  const params = new URLSearchParams({ u: rawDirectLink })
+  if (fileName) {
+    params.set('name', fileName)
+  }
+  return `/api/quark-download?${params.toString()}`
+}

@@ -6,7 +6,7 @@ import { parseChengtong } from './parsers/chengtong'
 import { parseFeiji } from './parsers/feiji'
 import { parsePan123 } from './parsers/pan123'
 import { parseBaidu, BAIDU_DOWNLOAD_UA } from './parsers/baidu'
-import { parseQuark } from './parsers/quark'
+import { parseQuark, buildQuarkProxyLink } from './parsers/quark'
 import { getCachedLink, setCachedLink } from './parsers/shared/cache'
 import { incrementStats } from './parsers/shared/stats'
 import { getSiteConfig } from './parsers/shared/config'
@@ -78,10 +78,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ success: true, isFolder: true, data: result })
     }
 
-    await setCachedLink(env, cacheKey, result.directLink)
+    // 夸克网盘直链只有携带账号 Cookie 才能访问，不能把裸链接交给浏览器，
+    // 这里换成走服务器代理下载的地址（Cookie 留在服务端），再缓存/返回这个代理地址。
+    const responseLink =
+      panType === 'quark' ? buildQuarkProxyLink(result.directLink, result.fileName) : result.directLink
+
+    await setCachedLink(env, cacheKey, responseLink)
     await incrementStats(env, panType)
 
-    return Response.json({ success: true, data: { ...result, cacheHit: false } })
+    return Response.json({
+      success: true,
+      data: { ...result, directLink: responseLink, cacheHit: false },
+    })
   } catch (error) {
     const message = error instanceof ParseError ? error.message : '解析失败，请检查链接或稍后重试'
     const fallbackUrl = error instanceof ParseError ? error.fallbackUrl : undefined
