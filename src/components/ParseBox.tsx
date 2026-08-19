@@ -15,6 +15,19 @@ export default function ParseBox({ onOpenAgreement }: Props) {
 
   const canSubmit = agreed && url.trim().length > 0 && !loading
 
+  function handleUrlChange(value: string) {
+    setUrl(value)
+    // 链接自带提取码（如 ?p=xxxx）时自动识别填充，避免用户还要再手动抄一遍
+    if (!pwd.trim()) {
+      try {
+        const p = new URL(value.trim()).searchParams.get('p')
+        if (p) setPwd(p)
+      } catch {
+        // 输入还没形成合法 URL，忽略
+      }
+    }
+  }
+
   async function runParse(targetUrl: string, targetPwd: string) {
     setLoading(true)
     setResult(null)
@@ -42,7 +55,7 @@ export default function ParseBox({ onOpenAgreement }: Props) {
       <label className="block text-xs text-slate-400 mb-1">分享链接</label>
       <input
         value={url}
-        onChange={(e) => setUrl(e.target.value)}
+        onChange={(e) => handleUrlChange(e.target.value)}
         placeholder="粘贴网盘分享链接，例如 https://xxx.lanzoui.com/xxxxx"
         className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
       />
