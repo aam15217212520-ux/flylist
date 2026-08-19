@@ -1,7 +1,9 @@
 import { fetchJson } from './shared/http'
-import type { ParsedFile, ParsedFolder, ParserContext } from './shared/types'
+import type { ParsedFile, ParsedFolder, ParserContext, Env } from './shared/types'
 import { ParseError } from './shared/types'
+import type { BaiduAccount } from './shared/config'
 import { getSiteConfig } from './shared/config'
+import { pickBaiduAccount, markBaiduAccountUsed, markBaiduAccountFailed, markBaiduAccountDirReady } from './shared/baiduPool'
 
 interface WxListItem {
   isdir: number | string
@@ -23,20 +25,37 @@ interface WxListResp {
   }
 }
 
-interface TplConfigResp {
+interface TemplateVarResp {
   errno: number
-  data?: { sign: string; timestamp: number | string }
+  result?: { bdstoken?: string }
 }
 
-interface ShareDownloadResp {
+interface ApiListResp {
   errno: number
-  list?: Array<{
-    dlink?: string
-    server_filename?: string
-    size?: number | string
-    path?: string
-  }>
+  list?: Array<{ path: string; isdir: number | string }>
 }
+
+interface ApiCreateResp {
+  errno: number
+}
+
+interface TransferResp {
+  errno: number
+  extra?: { list?: Array<{ to?: string; to_fs_id?: number | string }> }
+}
+
+interface ApiDownloadResp {
+  errno: number
+  list?: Array<{ dlink?: string }>
+}
+
+interface PcsLocateResp {
+  error_code?: number
+  errmsg?: string
+  urls?: Array<{ url: string }>
+}
+
+const PARSE_DIR = '/parse_file'
 
 const LIST_ERROR_MESSAGES: Record<string, string> = {
   mis_105: '你所解析的文件不存在',
@@ -48,37 +67,17 @@ const LIST_ERROR_MESSAGES: Record<string, string> = {
   '3': '该分享内容可能涉及侵权、色情等信息，无法访问',
   '0': '分享的文件已被删除',
   '10': '该分享已过期',
-  '8001': '账号可能被限制，请在后台检查百度网盘账号状态',
-  '9013': '账号被限制，请在后台检查百度网盘账号状态',
-  '9019': '账号 Cookie 状态异常，请在后台重新配置 BDUSS',
+  '8001': '账号可能被限制，请在后台检查百度网盘账号池状态',
+  '9013': '账号被限制，请在后台检查百度网盘账号池状态',
+  '9019': '账号 Cookie 状态异常，请在后台检查百度网盘账号池状态',
 }
 
-const DOWNLOAD_ERROR_MESSAGES: Record<string, string> = {
-  '999': '请求百度网盘服务器出错，请稍后重试',
-  '-20': '触发验证码，请稍后再试',
-  '-9': '文件不存在，请重新解析',
-  '-6': '账号未登录，请在后台检查百度网盘账号状态',
-  '-1': '该文件涉及违规内容，无法下载',
-  '2': '下载失败，请稍后重试',
-  '112': '解析已超时（签名 5 分钟内有效），请重新解析',
-  '113': '传参错误，请重新解析',
-  '116': '该分享不存在',
-  '118': '没有下载权限，请在后台检查百度网盘账号 Cookie 是否有效',
-  '110': '百度网盘服务器错误，可能是服务器 IP 被封禁',
-  '121': '选择的文件过多，请减少后重试',
-  '8001': '账号可能被限制，请在后台检查百度网盘账号状态',
-  '9013': '账号被限制，请在后台检查百度网盘账号状态',
-  '9019': '账号 Cookie 状态异常，请在后台重新配置 BDUSS',
-}
+/** 账号自身状态异常导致的错误码，出现时应标记该账号失效并尝试换用账号池中的其他账号 */
+const ACCOUNT_FAILURE_CODES = new Set(['8001', '9013', '9019', '-6', '118', '12'])
 
 function mapListError(res: WxListResp): string {
   const code = String(res.errtype ?? res.errno ?? 999)
   return LIST_ERROR_MESSAGES[code] ?? `百度网盘获取文件列表失败（错误码 ${code}），链接可能已失效或提取码不正确`
-}
-
-function mapDownloadError(errno?: number): string {
-  const code = String(errno ?? 999)
-  return DOWNLOAD_ERROR_MESSAGES[code] ?? `百度网盘获取下载链接失败（错误码 ${code}）`
 }
 
 /** URL-safe base64 转标准 base64，百度网盘 seckey 专用编码 */
@@ -87,31 +86,38 @@ function decodeSecKey(seckey: string): string {
 }
 
 function extractSurl(url: string): string | null {
-  const match = url.match(/\/s\/([A-Za-z0-9_-]+)/)
+  const match = url.match(/\/(?:s|e)\/([A-Za-z0-9_-]+)/)
   return match ? match[1] : null
 }
 
+function accountCookie(account: BaiduAccount): string {
+  return `BDUSS=${account.bduss};`
+}
+
 /**
- * 百度网盘解析。
+ * 百度网盘解析（账号池 + 转存下载方案）。
  *
- * 参考 codehub666/94list、HkList/HkList-laravel、yuantuo666/baiduwp-php 等开源实现，
- * 核心走官方微信端接口，不依赖分享页 HTML 结构：
- *   1) share/wxlist   —— 用 shorturl(+dir)+提取码 换取文件/文件夹列表，附带 uk/shareid/seckey
- *   2) share/tplconfig —— 用 shareid+uk 换取 sign/timestamp（下载签名，5分钟内有效）
- *   3) api/sharedownload —— 用 sign/timestamp + sekey(由 seckey 解码而来) + fs_id 换取真实下载直链
+ * 之前直接调用 api/sharedownload 拿分享直链的方案，在百度侧稳定触发 9019 人机验证风控，
+ * 经过与多个开源实现（f4team-cn/f4pan 等）交叉验证，风控只针对"匿名/分享场景直接下载"，
+ * 而"账号下载自己网盘里的文件"风控要宽松得多。因此改为：
+ *   1) share/wxlist       —— 拿文件列表 + uk/shareid/seckey（同旧版）
+ *   2) api/list+api/create —— 确保账号自己网盘下存在 /parse_file 目录
+ *   3) gettemplatevariable —— 拿账号自己的 bdstoken
+ *   4) share/transfer      —— 把分享文件转存到账号自己的 /parse_file 目录
+ *   5) api/download        —— 用账号自己的 cookie 下载"自己网盘里的文件"，拿到真实直链
+ *      （若失败，回退到 f4pan 使用的 PCS locatedownload 接口作为兜底）
  *
- * 之前的实现漏传了 sekey 参数，是导致"登录态已过期"报错的真正原因（对应百度错误码118：
- * 没有下载权限，未传入 sekey 参数或参数错误），而不是 Cookie 本身失效。
+ * 账号池：后台可配置多个百度账号，转存/下载失败时自动标记该账号失效并换下一个账号重试，
+ * 避免单账号被限速/封禁后网站直接不可用。
  */
 export async function parseBaidu(ctx: ParserContext): Promise<ParsedFile | ParsedFolder> {
   const { url, pwd, env } = ctx
   const config = await getSiteConfig(env)
-  const baidu = config.baidu
+  const accounts = config.baiduAccounts ?? []
 
-  if (!baidu?.bduss) {
-    throw new ParseError('管理员尚未在后台配置百度网盘账号，暂不支持解析')
+  if (accounts.length === 0) {
+    throw new ParseError('管理员尚未在后台配置百度网盘账号池，暂不支持解析')
   }
-  const cookie = `BDUSS=${baidu.bduss};`
 
   const surl = extractSurl(url)
   if (!surl) {
@@ -128,11 +134,11 @@ export async function parseBaidu(ctx: ParserContext): Promise<ParsedFile | Parse
     // 忽略，按根目录处理
   }
 
-  const { uk, shareid, seckey, list } = await fetchWxList(surl, fsId ? '' : dir, cookie, pwd ?? '')
+  const { uk, shareid, seckey, list } = await fetchWxListWithRetry(env, surl, fsId ? '' : dir, pwd ?? '')
 
   if (fsId) {
     const target = list.find((item) => String(item.fs_id) === fsId)
-    return await resolveDownload(cookie, uk, shareid, seckey, fsId, target?.server_filename)
+    return await resolveDownloadWithRetry(env, uk, shareid, seckey, fsId, surl, target?.server_filename)
   }
 
   const isRoot = dir === ''
@@ -142,7 +148,7 @@ export async function parseBaidu(ctx: ParserContext): Promise<ParsedFile | Parse
   // 根目录且只有单个文件：直接返回直链，不需要访客再多点一次
   if (isRoot && files.length === 1 && folders.length === 0) {
     const only = files[0]
-    return await resolveDownload(cookie, uk, shareid, seckey, String(only.fs_id), only.server_filename)
+    return await resolveDownloadWithRetry(env, uk, shareid, seckey, String(only.fs_id), surl, only.server_filename)
   }
 
   const folderItems: ParsedFolder['files'] = []
@@ -172,6 +178,50 @@ export async function parseBaidu(ctx: ParserContext): Promise<ParsedFile | Parse
     files: folderItems,
   }
 }
+
+/** 拿文件列表阶段账号出问题（如 Cookie 失效）时换用账号池里的下一个账号重试 */
+async function fetchWxListWithRetry(
+  env: Env,
+  surl: string,
+  dir: string,
+  pwd: string,
+): Promise<{ uk: string; shareid: string; seckey: string; list: WxListItem[] }> {
+  const triedIds = new Set<string>()
+  const maxAttempts = (await getSiteConfig(env)).baiduAccounts?.length ?? 1
+
+  for (let attempt = 0; attempt < Math.max(maxAttempts, 1); attempt++) {
+    const account = await pickUntried(env, triedIds)
+    if (!account) {
+      throw new ParseError('没有可用的百度网盘账号，请在后台检查账号池状态')
+    }
+    triedIds.add(account.id)
+
+    try {
+      const result = await fetchWxList(surl, dir, accountCookie(account), pwd)
+      await markBaiduAccountUsed(env, account.id)
+      return result
+    } catch (error) {
+      if (error instanceof AccountFailure) {
+        await markBaiduAccountFailed(env, account.id, error.message)
+        continue
+      }
+      throw error
+    }
+  }
+
+  throw new ParseError('账号池中所有账号均不可用，请在后台检查百度网盘账号池状态')
+}
+
+async function pickUntried(env: Env, triedIds: Set<string>): Promise<BaiduAccount | null> {
+  const config = await getSiteConfig(env)
+  const accounts = (config.baiduAccounts ?? []).filter((a) => a.status === 'normal' && !triedIds.has(a.id))
+  if (accounts.length === 0) return null
+  accounts.sort((a, b) => a.lastUsedAt - b.lastUsedAt)
+  return accounts[0]
+}
+
+/** 标记"这是账号自身问题，应该换号重试"的内部错误 */
+class AccountFailure extends Error {}
 
 async function fetchWxList(
   surl: string,
@@ -216,6 +266,10 @@ async function fetchWxList(
   }
 
   if (data.errno !== 0 || !data.data) {
+    const code = String(data.errtype ?? data.errno ?? 999)
+    if (ACCOUNT_FAILURE_CODES.has(code)) {
+      throw new AccountFailure(mapListError(data))
+    }
     throw new ParseError(mapListError(data))
   }
 
@@ -227,38 +281,71 @@ async function fetchWxList(
   }
 }
 
-async function fetchSign(cookie: string, uk: string, shareid: string): Promise<{ sign: string; timestamp: string }> {
-  const res = await fetchJson<TplConfigResp>(
-    `https://pan.baidu.com/share/tplconfig?shareid=${shareid}&uk=${uk}&fields=sign,timestamp&channel=chunlei&web=1&app_id=250528&clienttype=0`,
-    {
-      headers: {
-        'User-Agent': 'netdisk;pan.baidu.com',
-        Cookie: cookie,
-        Referer: 'https://pan.baidu.com/disk/home',
-      },
-    },
-  )
-
-  if (res.errno !== 0 || !res.data?.sign || !res.data?.timestamp) {
-    throw new ParseError('未能获取百度网盘下载签名，账号 Cookie 可能已失效，请在后台更新 BDUSS')
-  }
-
-  return { sign: res.data.sign, timestamp: String(res.data.timestamp) }
-}
-
-async function resolveDownload(
-  cookie: string,
+/** 转存+下载阶段账号出问题时换用账号池里的下一个账号重试 */
+async function resolveDownloadWithRetry(
+  env: Env,
   uk: string,
   shareid: string,
   seckey: string,
   fsId: string,
+  surl: string,
   fallbackName?: string,
 ): Promise<ParsedFile> {
-  const { sign, timestamp } = await fetchSign(cookie, uk, shareid)
-  const randsk = decodeSecKey(seckey)
+  const triedIds = new Set<string>()
+  const maxAttempts = (await getSiteConfig(env)).baiduAccounts?.length ?? 1
 
-  const downloadRes = await fetchJson<ShareDownloadResp>(
-    `https://pan.baidu.com/api/sharedownload?app_id=250528&channel=chunlei&clienttype=12&sign=${encodeURIComponent(sign)}&timestamp=${timestamp}&web=1`,
+  for (let attempt = 0; attempt < Math.max(maxAttempts, 1); attempt++) {
+    const account = await pickUntried(env, triedIds)
+    if (!account) {
+      throw new ParseError('没有可用的百度网盘账号，请在后台检查账号池状态')
+    }
+    triedIds.add(account.id)
+
+    try {
+      const result = await resolveDownload(env, account, uk, shareid, seckey, fsId, surl, fallbackName)
+      await markBaiduAccountUsed(env, account.id)
+      return result
+    } catch (error) {
+      if (error instanceof AccountFailure) {
+        await markBaiduAccountFailed(env, account.id, error.message)
+        continue
+      }
+      throw error
+    }
+  }
+
+  throw new ParseError('账号池中所有账号均转存/下载失败，请在后台检查百度网盘账号池状态')
+}
+
+async function getOwnBdsToken(cookie: string): Promise<string> {
+  const res = await fetchJson<TemplateVarResp>(
+    'https://pan.baidu.com/api/gettemplatevariable?clienttype=0&app_id=250528&web=1&fields=%5B%22bdstoken%22%2C%22token%22%2C%22uk%22%2C%22isdocuser%22%2C%22servertime%22%5D',
+    { headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' } },
+  )
+  const token = res.result?.bdstoken
+  if (res.errno !== 0 || !token) {
+    throw new AccountFailure('账号 Cookie 已失效，无法获取 bdstoken')
+  }
+  return token
+}
+
+/** 确保账号自己网盘根目录下存在 /parse_file 目录，用于承接转存的文件 */
+async function ensureParseDir(env: Env, account: BaiduAccount, cookie: string, bdstoken: string): Promise<void> {
+  if (account.dirReady) return
+
+  const listRes = await fetchJson<ApiListResp>(
+    `https://pan.baidu.com/api/list?dir=%2F&order=name&desc=0&start=0&limit=500&web=1&app_id=250528&channel=chunlei&clienttype=0&bdstoken=${encodeURIComponent(bdstoken)}`,
+    { headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' } },
+  )
+
+  const exists = listRes.list?.some((item) => item.path === PARSE_DIR && Number(item.isdir) === 1)
+  if (exists) {
+    await markBaiduAccountDirReady(env, account.id)
+    return
+  }
+
+  const createRes = await fetchJson<ApiCreateResp>(
+    `https://pan.baidu.com/api/create?a=commit&web=1&app_id=250528&channel=chunlei&clienttype=0&bdstoken=${encodeURIComponent(bdstoken)}`,
     {
       method: 'POST',
       headers: {
@@ -267,28 +354,125 @@ async function resolveDownload(
         Referer: 'https://pan.baidu.com/disk/home',
       },
       body: new URLSearchParams({
-        encrypt: '0',
-        extra: JSON.stringify({ sekey: randsk }),
-        fid_list: `[${fsId}]`,
-        primaryid: shareid,
-        uk,
-        product: 'share',
-        type: 'nolimit',
+        path: PARSE_DIR,
+        isdir: '1',
+        size: '',
+        block_list: '[]',
+        method: 'post',
       }).toString(),
     },
   )
 
-  const file = downloadRes.list?.[0]
-  if (downloadRes.errno !== 0 || !file?.dlink) {
-    throw new ParseError(mapDownloadError(downloadRes.errno))
+  if (createRes.errno !== 0) {
+    throw new AccountFailure('无法在账号网盘下创建转存目录，账号可能异常')
   }
+  await markBaiduAccountDirReady(env, account.id)
+}
+
+/** 把分享的文件转存到账号自己的 /parse_file 目录 */
+async function transferToOwnDrive(
+  cookie: string,
+  shareid: string,
+  uk: string,
+  fsId: string,
+  randsk: string,
+  bdstoken: string,
+  shareUrl: string,
+): Promise<{ toPath: string; toFsId: string }> {
+  const res = await fetchJson<TransferResp>(
+    `https://pan.baidu.com/share/transfer?shareid=${shareid}&from=${uk}&sekey=${encodeURIComponent(randsk)}&ondup=newcopy&async=1&channel=chunlei&web=1&app_id=250528&bdstoken=${encodeURIComponent(bdstoken)}&clienttype=0`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Cookie: cookie,
+        Referer: shareUrl,
+      },
+      body: `fsidlist=%5B${fsId}%5D&path=${encodeURIComponent(PARSE_DIR)}&type=1`,
+    },
+  )
+
+  // 9013/12：账号本身状态异常（限制/未登录），换号重试；2：目标已存在等业务错误，不换号但视为失败
+  if (res.errno === 9013 || res.errno === 12) {
+    throw new AccountFailure(`转存失败（错误码 ${res.errno}），账号可能被限制`)
+  }
+
+  const item = res.extra?.list?.[0]
+  if (res.errno !== 0 || !item?.to_fs_id) {
+    throw new ParseError(`转存文件失败（错误码 ${res.errno}），请检查账号可用空间`)
+  }
+
+  return { toPath: String(item.to), toFsId: String(item.to_fs_id) }
+}
+
+/** 优先走官方网页下载接口拿自己文件的直链；失败则回退到 f4pan 使用的 PCS 移动端接口 */
+async function downloadOwnFile(cookie: string, toFsId: string, toPath: string, bdstoken: string): Promise<string> {
+  try {
+    const res = await fetchJson<ApiDownloadResp>(
+      `https://pan.baidu.com/api/download?type=dlink&app_id=250528&channel=chunlei&web=1&clienttype=0&fidlist=%5B${toFsId}%5D&bdstoken=${encodeURIComponent(bdstoken)}`,
+      { headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' } },
+    )
+    const dlink = res.list?.[0]?.dlink
+    if (res.errno === 0 && dlink) {
+      return dlink
+    }
+  } catch {
+    // 忽略，走下面的兜底方案
+  }
+
+  // 兜底：f4pan 使用的 PCS 移动端下载接口（部分字段为其抓包得到的固定值，风险自负）
+  const encodedPath = encodeURIComponent(toPath)
+  const pcsUrl =
+    `https://d.pcs.baidu.com/rest/2.0/pcs/file?ant=1&apn_id=33_13&app_id=250528&channel=0&check_blue=1` +
+    `&clienttype=17&cuid=08E271F7046B366BE1BF9F1F30DF0689%7CVFZVYSRCU&deviceid=611777535803319847` +
+    `&devuid=08E271F7046B366BE1BF9F1F30DF0689%7CVFZVYSRCU&dtype=1&eck=1&ehps=1&err_ver=1.0&es=1&esl=1` +
+    `&freeisp=0&method=locatedownload&network_type=4G&path=${encodedPath}&queryfree=0` +
+    `&rand=0854bec9ad10241680eb16aaf3e9ab3912f0f429&time=${Math.floor(Date.now() / 1000)}&use=0&ver=4.0` +
+    `&version=2.2.101.242&version_app=12.25.3&vip=0&psign=aa42ffc322b4c71d2f39e422aa83607e`
+
+  const pcsRes = await fetchJson<PcsLocateResp>(pcsUrl, {
+    headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' },
+  })
+
+  const url = pcsRes.urls?.[0]?.url
+  if (!url) {
+    throw new ParseError(`获取下载直链失败：${pcsRes.errmsg ?? '未知错误'}`)
+  }
+  return `${url}&origin=dlna`
+}
+
+async function resolveDownload(
+  env: Env,
+  account: BaiduAccount,
+  uk: string,
+  shareid: string,
+  seckey: string,
+  fsId: string,
+  surl: string,
+  fallbackName?: string,
+): Promise<ParsedFile> {
+  const cookie = accountCookie(account)
+  const bdstoken = await getOwnBdsToken(cookie)
+
+  await ensureParseDir(env, account, cookie, bdstoken)
+
+  const randsk = decodeSecKey(seckey)
+  const { toPath, toFsId } = await transferToOwnDrive(
+    cookie,
+    shareid,
+    uk,
+    fsId,
+    randsk,
+    bdstoken,
+    `https://pan.baidu.com/s/${surl}`,
+  )
+
+  const dlink = await downloadOwnFile(cookie, toFsId, toPath, bdstoken)
 
   return {
     panType: 'baidu',
     panName: '百度网盘',
-    fileName: file.server_filename ?? fallbackName,
-    fileSize: file.size !== undefined ? String(file.size) : undefined,
-    directLink: file.dlink,
+    fileName: fallbackName,
+    directLink: dlink,
   }
 }
-

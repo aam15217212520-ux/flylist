@@ -1,6 +1,7 @@
 import type { Env } from '../parsers/shared/types'
 import { readJsonBody } from '../parsers/shared/http'
 import { getSiteConfig, saveSiteConfig } from '../parsers/shared/config'
+import type { BaiduAccount } from '../parsers/shared/config'
 import { isAuthenticated } from './_session'
 
 const DEFAULT_PAN_ENABLED: Record<string, boolean> = {
@@ -13,11 +14,26 @@ const DEFAULT_PAN_ENABLED: Record<string, boolean> = {
 }
 
 interface ConfigUpdateBody {
-  bduss?: string
-  stoken?: string
   quarkCookie?: string
   panEnabled?: Record<string, boolean>
   announcement?: { content: string; enabled: boolean }
+  addBaiduAccount?: { bduss: string; note?: string }
+  removeBaiduAccountId?: string
+  setBaiduAccountStatus?: { id: string; status: 'normal' | 'disabled' }
+}
+
+function publicAccount(account: BaiduAccount) {
+  // 出于安全考虑，永远不把完整 BDUSS 明文回传给前端，只回传末尾几位用于辨认
+  const masked = account.bduss.length > 6 ? `${'*'.repeat(account.bduss.length - 6)}${account.bduss.slice(-6)}` : '******'
+  return {
+    id: account.id,
+    bdussMasked: masked,
+    note: account.note ?? '',
+    status: account.status,
+    lastUsedAt: account.lastUsedAt,
+    createdAt: account.createdAt,
+    lastError: account.lastError ?? null,
+  }
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
@@ -28,8 +44,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   return Response.json({
     success: true,
     data: {
-      baiduConfigured: Boolean(config.baidu?.bduss),
-      baiduUpdatedAt: config.baidu?.updatedAt ?? null,
+      baiduAccounts: (config.baiduAccounts ?? []).map(publicAccount),
       quarkConfigured: Boolean(config.quark?.cookie),
       quarkUpdatedAt: config.quark?.updatedAt ?? null,
       panEnabled: { ...DEFAULT_PAN_ENABLED, ...(config.panEnabled ?? {}) },
@@ -51,11 +66,30 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const config = await getSiteConfig(env)
 
-  if (body.bduss) {
-    config.baidu = {
-      bduss: body.bduss,
-      stoken: body.stoken ?? config.baidu?.stoken ?? '',
-      updatedAt: Date.now(),
+  if (body.addBaiduAccount?.bduss) {
+    const accounts = config.baiduAccounts ?? []
+    const newAccount: BaiduAccount = {
+      id: crypto.randomUUID(),
+      bduss: body.addBaiduAccount.bduss,
+      note: body.addBaiduAccount.note ?? '',
+      status: 'normal',
+      lastUsedAt: 0,
+      createdAt: Date.now(),
+    }
+    config.baiduAccounts = [...accounts, newAccount]
+  }
+
+  if (body.removeBaiduAccountId) {
+    config.baiduAccounts = (config.baiduAccounts ?? []).filter((a) => a.id !== body.removeBaiduAccountId)
+  }
+
+  if (body.setBaiduAccountStatus) {
+    const { id, status } = body.setBaiduAccountStatus
+    const accounts = config.baiduAccounts ?? []
+    const account = accounts.find((a) => a.id === id)
+    if (account) {
+      account.status = status
+      if (status === 'normal') account.lastError = undefined
     }
   }
 

@@ -10,9 +10,18 @@ const PAN_LABELS: Record<string, string> = {
   quark: '夸克网盘',
 }
 
+interface BaiduAccountView {
+  id: string
+  bdussMasked: string
+  note: string
+  status: 'normal' | 'disabled'
+  lastUsedAt: number
+  createdAt: number
+  lastError: string | null
+}
+
 interface ConfigData {
-  baiduConfigured: boolean
-  baiduUpdatedAt: number | null
+  baiduAccounts: BaiduAccountView[]
   quarkConfigured: boolean
   quarkUpdatedAt: number | null
   panEnabled: Record<string, boolean>
@@ -24,12 +33,12 @@ export default function Admin() {
   const [password, setPassword] = useState('')
   const [loginError, setLoginError] = useState('')
   const [config, setConfig] = useState<ConfigData | null>(null)
-  const [bduss, setBduss] = useState('')
-  const [stoken, setStoken] = useState('')
+  const [newBduss, setNewBduss] = useState('')
+  const [newBdussNote, setNewBdussNote] = useState('')
+  const [baiduMsg, setBaiduMsg] = useState('')
   const [quarkCookie, setQuarkCookie] = useState('')
   const [quarkMsg, setQuarkMsg] = useState('')
   const [stats, setStats] = useState<StatsData | null>(null)
-  const [saveMsg, setSaveMsg] = useState('')
   const [announcementContent, setAnnouncementContent] = useState('')
   const [announcementEnabled, setAnnouncementEnabled] = useState(false)
   const [announcementMsg, setAnnouncementMsg] = useState('')
@@ -69,20 +78,42 @@ export default function Admin() {
     }
   }
 
-  async function handleSaveBaidu() {
-    setSaveMsg('')
+  async function handleAddBaiduAccount() {
+    setBaiduMsg('')
+    if (!newBduss.trim()) {
+      setBaiduMsg('请输入 BDUSS')
+      return
+    }
     const res = await fetch('/api/admin/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bduss, stoken }),
+      body: JSON.stringify({ addBaiduAccount: { bduss: newBduss.trim(), note: newBdussNote.trim() } }),
     })
     const json = (await res.json()) as { success: boolean; message?: string }
-    setSaveMsg(json.success ? '保存成功 ✓' : json.message ?? '保存失败')
+    setBaiduMsg(json.success ? '添加成功 ✓' : json.message ?? '添加失败')
     if (json.success) {
-      setBduss('')
-      setStoken('')
+      setNewBduss('')
+      setNewBdussNote('')
       loadConfig()
     }
+  }
+
+  async function handleRemoveBaiduAccount(id: string) {
+    await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ removeBaiduAccountId: id }),
+    })
+    loadConfig()
+  }
+
+  async function handleSetBaiduAccountStatus(id: string, status: 'normal' | 'disabled') {
+    await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setBaiduAccountStatus: { id, status } }),
+    })
+    loadConfig()
   }
 
   async function handleSaveQuark() {
@@ -172,32 +203,69 @@ export default function Admin() {
       )}
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
-        <h2 className="text-accent2 mb-1">百度网盘 SVIP 账号配置</h2>
+        <h2 className="text-accent2 mb-1">百度网盘账号池</h2>
         <p className="text-xs text-slate-500 mb-4">
-          当前状态：
-          {config?.baiduConfigured ? <span className="text-accent"> 已配置 ✓</span> : <span className="text-warn"> 未配置</span>}
-          {config?.baiduUpdatedAt && (
-            <span className="ml-2 text-slate-600">更新于 {new Date(config.baiduUpdatedAt).toLocaleString()}</span>
-          )}
+          共 {config?.baiduAccounts.length ?? 0} 个账号，解析时自动选用状态正常且最久未使用的账号；转存/下载失败会自动标记为失效并换用下一个账号。
         </p>
-        <label className="block text-xs text-slate-400 mb-1">BDUSS</label>
+
+        {config && config.baiduAccounts.length > 0 && (
+          <div className="space-y-2 mb-4">
+            {config.baiduAccounts.map((acc) => (
+              <div key={acc.id} className="flex items-center justify-between bg-black/30 border border-slate-700 rounded px-3 py-2">
+                <div className="text-xs">
+                  <p className="text-slate-300">
+                    {acc.note ? `${acc.note} · ` : ''}
+                    <span className="text-slate-500">{acc.bdussMasked}</span>
+                  </p>
+                  <p className="text-slate-600 mt-0.5">
+                    {acc.status === 'normal' ? <span className="text-accent">正常</span> : <span className="text-warn">已失效</span>}
+                    {acc.lastUsedAt > 0 && <span className="ml-2">上次使用 {new Date(acc.lastUsedAt).toLocaleString()}</span>}
+                    {acc.lastError && <span className="ml-2 text-warn">{acc.lastError}</span>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {acc.status === 'normal' ? (
+                    <button
+                      onClick={() => handleSetBaiduAccountStatus(acc.id, 'disabled')}
+                      className="text-xs text-slate-500 hover:text-warn"
+                    >
+                      停用
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleSetBaiduAccountStatus(acc.id, 'normal')}
+                      className="text-xs text-slate-500 hover:text-accent"
+                    >
+                      恢复
+                    </button>
+                  )}
+                  <button onClick={() => handleRemoveBaiduAccount(acc.id)} className="text-xs text-slate-500 hover:text-warn">
+                    删除
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <label className="block text-xs text-slate-400 mb-1">新增账号 BDUSS</label>
         <input
-          value={bduss}
-          onChange={(e) => setBduss(e.target.value)}
-          placeholder="留空则不修改"
+          value={newBduss}
+          onChange={(e) => setNewBduss(e.target.value)}
+          placeholder="从浏览器登录 pan.baidu.com 后抓取 Cookie 中的 BDUSS 字段"
           className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-3"
         />
-        <label className="block text-xs text-slate-400 mb-1">STOKEN</label>
+        <label className="block text-xs text-slate-400 mb-1">备注（可选，方便辨认账号）</label>
         <input
-          value={stoken}
-          onChange={(e) => setStoken(e.target.value)}
-          placeholder="留空则不修改"
+          value={newBdussNote}
+          onChange={(e) => setNewBdussNote(e.target.value)}
+          placeholder="例如：账号1 / SVIP7"
           className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
         />
-        <button onClick={handleSaveBaidu} className="px-4 py-2 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan">
-          保存
+        <button onClick={handleAddBaiduAccount} className="px-4 py-2 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan">
+          添加账号
         </button>
-        {saveMsg && <span className="ml-3 text-xs text-slate-400">{saveMsg}</span>}
+        {baiduMsg && <span className="ml-3 text-xs text-slate-400">{baiduMsg}</span>}
       </section>
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
