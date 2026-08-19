@@ -45,6 +45,10 @@ export default function Admin() {
   const [announcementContent, setAnnouncementContent] = useState('')
   const [announcementEnabled, setAnnouncementEnabled] = useState(false)
   const [announcementMsg, setAnnouncementMsg] = useState('')
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
+  const [passwordMsg, setPasswordMsg] = useState('')
 
   async function loadConfig() {
     const res = await fetch('/api/admin/config')
@@ -189,6 +193,30 @@ export default function Admin() {
     await fetch('/api/admin/logout', { method: 'POST' })
     setAuthed(false)
     setConfig(null)
+  }
+
+  async function handleChangePassword() {
+    setPasswordMsg('')
+    if (!oldPassword || !newPassword) {
+      setPasswordMsg('请输入原密码和新密码')
+      return
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setPasswordMsg('两次输入的新密码不一致')
+      return
+    }
+    const res = await fetch('/api/admin/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ oldPassword, newPassword }),
+    })
+    const json = (await res.json()) as { success: boolean; message?: string }
+    setPasswordMsg(json.success ? '密码修改成功 ✓' : json.message ?? '修改失败')
+    if (json.success) {
+      setOldPassword('')
+      setNewPassword('')
+      setNewPasswordConfirm('')
+    }
   }
 
   if (!authed) {
@@ -403,6 +431,36 @@ export default function Admin() {
             </label>
           ))}
         </div>
+      </section>
+
+      <section className="bg-panel border border-accent/20 rounded-lg p-6 mt-6">
+        <h2 className="text-accent2 mb-4">修改管理密码</h2>
+        <label className="block text-xs text-slate-400 mb-1">原密码</label>
+        <input
+          type="password"
+          value={oldPassword}
+          onChange={(e) => setOldPassword(e.target.value)}
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-3"
+        />
+        <label className="block text-xs text-slate-400 mb-1">新密码（至少 6 位）</label>
+        <input
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-3"
+        />
+        <label className="block text-xs text-slate-400 mb-1">确认新密码</label>
+        <input
+          type="password"
+          value={newPasswordConfirm}
+          onChange={(e) => setNewPasswordConfirm(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleChangePassword()}
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
+        />
+        <button onClick={handleChangePassword} className="px-4 py-2 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan">
+          修改密码
+        </button>
+        {passwordMsg && <span className="ml-3 text-xs text-slate-400">{passwordMsg}</span>}
       </section>
     </div>
   )
