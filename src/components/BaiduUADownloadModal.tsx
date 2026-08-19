@@ -79,6 +79,17 @@ export default function BaiduUADownloadModal({ open, directLink, requiredUA, fil
           <p>③ 粘贴上方 User-Agent 字符串，替换默认值</p>
           <p>④ 开始下载即可</p>
           <p className="text-slate-500 pt-1">其他支持自定义请求头的下载工具（如 aria2、Motrix）用法类似。</p>
+          <p className="pt-1">
+            还没有 IDM？
+            <a
+              href="https://www.uy5.net/idm/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent2 underline hover:text-accent ml-1"
+            >
+              点击下载 IDM
+            </a>
+          </p>
         </div>
 
         <button
