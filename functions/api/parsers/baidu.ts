@@ -44,15 +44,9 @@ interface TransferResp {
   extra?: { list?: Array<{ to?: string; to_fs_id?: number | string }> }
 }
 
-interface ApiDownloadResp {
+interface FileMetasResp {
   errno: number
-  list?: Array<{ dlink?: string }>
-}
-
-interface PcsLocateResp {
-  error_code?: number
-  errmsg?: string
-  urls?: Array<{ url: string }>
+  info?: Array<{ dlink?: string }>
 }
 
 const PARSE_DIR = '/parse_file'
@@ -408,40 +402,35 @@ async function transferToOwnDrive(
   return { toPath: String(item.to), toFsId: String(item.to_fs_id) }
 }
 
-/** 优先走官方网页下载接口拿自己文件的直链；失败则回退到 f4pan 使用的 PCS 移动端接口 */
-async function downloadOwnFile(cookie: string, toFsId: string, toPath: string, bdstoken: string): Promise<string> {
-  try {
-    const res = await fetchJson<ApiDownloadResp>(
-      `https://pan.baidu.com/api/download?type=dlink&app_id=250528&channel=chunlei&web=1&clienttype=0&fidlist=%5B${toFsId}%5D&bdstoken=${encodeURIComponent(bdstoken)}`,
-      { headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' } },
-    )
-    const dlink = res.list?.[0]?.dlink
-    if (res.errno === 0 && dlink) {
-      return dlink
-    }
-  } catch {
-    // 忽略，走下面的兜底方案
+/** 通过 filemetas 拿账号自己文件的 dlink 签名，再用固定 User-Agent（百度服务端按此签发真实 CDN 地址，
+ * 换成浏览器/curl 等常见 UA 会被判定为未授权，返回 403 hitcode:119）解析出最终的 CDN 直链。
+ *
+ * 注意：这个最终 CDN 直链本身也要求请求方 User-Agent 精确等于 BAIDU_DOWNLOAD_UA，
+ * 而浏览器发起下载请求时无法自定义 UA，因此这里不做服务端代理转发，只把直链本身返回给前端，
+ * 由用户自行用支持自定义 UA 的下载工具（如 IDM）填入该 UA 后下载。 */
+export const BAIDU_DOWNLOAD_UA = 'pan.baidu.com'
+
+async function downloadOwnFile(cookie: string, toFsId: string, bdstoken: string): Promise<string> {
+  const metaRes = await fetchJson<FileMetasResp>(
+    `https://pan.baidu.com/api/filemetas?dlink=1&fsids=%5B${toFsId}%5D&app_id=250528&channel=chunlei&web=1&clienttype=0&bdstoken=${encodeURIComponent(bdstoken)}`,
+    { headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' } },
+  )
+
+  const dlink = metaRes.info?.[0]?.dlink
+  if (metaRes.errno !== 0 || !dlink) {
+    throw new ParseError(`获取下载直链失败（错误码 ${metaRes.errno}）`)
   }
 
-  // 兜底：f4pan 使用的 PCS 移动端下载接口（部分字段为其抓包得到的固定值，风险自负）
-  const encodedPath = encodeURIComponent(toPath)
-  const pcsUrl =
-    `https://d.pcs.baidu.com/rest/2.0/pcs/file?ant=1&apn_id=33_13&app_id=250528&channel=0&check_blue=1` +
-    `&clienttype=17&cuid=08E271F7046B366BE1BF9F1F30DF0689%7CVFZVYSRCU&deviceid=611777535803319847` +
-    `&devuid=08E271F7046B366BE1BF9F1F30DF0689%7CVFZVYSRCU&dtype=1&eck=1&ehps=1&err_ver=1.0&es=1&esl=1` +
-    `&freeisp=0&method=locatedownload&network_type=4G&path=${encodedPath}&queryfree=0` +
-    `&rand=0854bec9ad10241680eb16aaf3e9ab3912f0f429&time=${Math.floor(Date.now() / 1000)}&use=0&ver=4.0` +
-    `&version=2.2.101.242&version_app=12.25.3&vip=0&psign=aa42ffc322b4c71d2f39e422aa83607e`
-
-  const pcsRes = await fetchJson<PcsLocateResp>(pcsUrl, {
-    headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' },
+  const redirectRes = await fetch(dlink, {
+    headers: { Cookie: cookie, 'User-Agent': BAIDU_DOWNLOAD_UA },
+    redirect: 'manual',
   })
 
-  const url = pcsRes.urls?.[0]?.url
-  if (!url) {
-    throw new ParseError(`获取下载直链失败：${pcsRes.errmsg ?? '未知错误'}`)
+  const finalUrl = redirectRes.headers.get('location')
+  if (!finalUrl) {
+    throw new ParseError('获取下载直链失败：百度网盘未返回最终下载地址，链接可能已失效')
   }
-  return `${url}&origin=dlna`
+  return finalUrl
 }
 
 async function resolveDownload(
@@ -460,7 +449,7 @@ async function resolveDownload(
   await ensureParseDir(env, account, cookie, bdstoken)
 
   const randsk = decodeSecKey(seckey)
-  const { toPath, toFsId } = await transferToOwnDrive(
+  const { toFsId } = await transferToOwnDrive(
     cookie,
     shareid,
     uk,
@@ -470,12 +459,13 @@ async function resolveDownload(
     `https://pan.baidu.com/s/${surl}`,
   )
 
-  const dlink = await downloadOwnFile(cookie, toFsId, toPath, bdstoken)
+  const dlink = await downloadOwnFile(cookie, toFsId, bdstoken)
 
   return {
     panType: 'baidu',
     panName: '百度网盘',
     fileName: fallbackName,
     directLink: dlink,
+    requiredUA: BAIDU_DOWNLOAD_UA,
   }
 }

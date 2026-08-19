@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import type { ParseResult } from '../lib/api'
+import BaiduUADownloadModal from './BaiduUADownloadModal'
 
 interface Props {
   result: ParseResult
@@ -6,6 +8,8 @@ interface Props {
 }
 
 export default function ResultCard({ result, onSelectFolderFile }: Props) {
+  const [uaModalOpen, setUaModalOpen] = useState(false)
+
   if (!result.success || !result.data) {
     if (result.isFolder && result.folder) {
       const { panName, folderName, files } = result.folder
@@ -51,7 +55,7 @@ export default function ResultCard({ result, onSelectFolderFile }: Props) {
     )
   }
 
-  const { panName, fileName, fileSize, directLink, cacheHit } = result.data
+  const { panName, fileName, fileSize, directLink, cacheHit, requiredUA } = result.data
 
   return (
     <div className="mt-4 border border-accent/30 bg-black/30 rounded px-4 py-3 text-sm space-y-2">
@@ -60,14 +64,32 @@ export default function ResultCard({ result, onSelectFolderFile }: Props) {
       </p>
       {fileName && <p className="text-slate-300 truncate">文件名：{fileName}</p>}
       {fileSize && <p className="text-slate-500 text-xs">大小：{fileSize}</p>}
-      <a
-        href={directLink}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-block mt-2 px-4 py-1.5 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan"
-      >
-        立即下载 ↓
-      </a>
+      {requiredUA ? (
+        <>
+          <button
+            onClick={() => setUaModalOpen(true)}
+            className="inline-block mt-2 px-4 py-1.5 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan"
+          >
+            查看下载方式 ↓
+          </button>
+          <BaiduUADownloadModal
+            open={uaModalOpen}
+            directLink={directLink}
+            requiredUA={requiredUA}
+            fileName={fileName}
+            onClose={() => setUaModalOpen(false)}
+          />
+        </>
+      ) : (
+        <a
+          href={directLink}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block mt-2 px-4 py-1.5 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan"
+        >
+          立即下载 ↓
+        </a>
+      )}
     </div>
   )
 }

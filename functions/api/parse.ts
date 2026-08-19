@@ -5,7 +5,7 @@ import { parseLanzou } from './parsers/lanzou'
 import { parseChengtong } from './parsers/chengtong'
 import { parseFeiji } from './parsers/feiji'
 import { parsePan123 } from './parsers/pan123'
-import { parseBaidu } from './parsers/baidu'
+import { parseBaidu, BAIDU_DOWNLOAD_UA } from './parsers/baidu'
 import { parseQuark } from './parsers/quark'
 import { getCachedLink, setCachedLink } from './parsers/shared/cache'
 import { incrementStats } from './parsers/shared/stats'
@@ -40,7 +40,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     await incrementStats(env, panType)
     return Response.json({
       success: true,
-      data: { panType, panName: PAN_NAMES[panType], directLink: cached, cacheHit: true },
+      data: {
+        panType,
+        panName: PAN_NAMES[panType],
+        directLink: cached,
+        cacheHit: true,
+        requiredUA: panType === 'baidu' ? BAIDU_DOWNLOAD_UA : undefined,
+      },
     })
   }
 
