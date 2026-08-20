@@ -13,10 +13,12 @@ const DEFAULT_PAN_ENABLED: Record<string, boolean> = {
   quark: true,
   gdrive: true,
   ilanzou: true,
+  aliyun: true,
 }
 
 interface ConfigUpdateBody {
   quarkCookie?: string
+  aliyunRefreshToken?: string
   panEnabled?: Record<string, boolean>
   panDisabledReasons?: Record<string, string>
   announcement?: { content: string; enabled: boolean }
@@ -51,6 +53,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       baiduAccounts: (config.baiduAccounts ?? []).map(publicAccount),
       quarkConfigured: Boolean(config.quark?.cookie),
       quarkUpdatedAt: config.quark?.updatedAt ?? null,
+      aliyunConfigured: Boolean(config.aliyun?.refreshToken),
+      aliyunUpdatedAt: config.aliyun?.updatedAt ?? null,
       panEnabled: { ...DEFAULT_PAN_ENABLED, ...(config.panEnabled ?? {}) },
       panDisabledReasons: config.panDisabledReasons ?? {},
       announcement: {
@@ -119,6 +123,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (body.quarkCookie) {
     config.quark = {
       cookie: body.quarkCookie,
+      updatedAt: Date.now(),
+    }
+  }
+
+  if (body.aliyunRefreshToken) {
+    config.aliyun = {
+      refreshToken: body.aliyunRefreshToken,
       updatedAt: Date.now(),
     }
   }

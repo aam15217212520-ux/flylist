@@ -1,4 +1,4 @@
-export type PanType = 'lanzou' | 'chengtong' | 'feiji' | 'pan123' | 'baidu' | 'quark' | 'gdrive' | 'ilanzou'
+export type PanType = 'lanzou' | 'chengtong' | 'feiji' | 'pan123' | 'baidu' | 'quark' | 'gdrive' | 'ilanzou' | 'aliyun'
 
 const HOST_RULES: Array<{ type: PanType; test: RegExp }> = [
   // ilanzou 规则要放在 lanzou 前面：lanzou 的正则没有锚定开头，会把 "ilanzou.com" 也误判成蓝奏云
@@ -10,6 +10,7 @@ const HOST_RULES: Array<{ type: PanType; test: RegExp }> = [
   { type: 'baidu', test: /pan\.baidu\.com|yun\.baidu\.com/i },
   { type: 'quark', test: /pan\.quark\.cn/i },
   { type: 'gdrive', test: /drive\.google\.com|docs\.google\.com/i },
+  { type: 'aliyun', test: /alipan\.com|aliyundrive\.com/i },
 ]
 
 export function detectPanType(url: string): PanType | null {
@@ -33,4 +34,5 @@ export const PAN_NAMES: Record<PanType, string> = {
   quark: '夸克网盘',
   gdrive: 'Google Drive',
   ilanzou: '蓝奏云优享版',
+  aliyun: '阿里云盘',
 }

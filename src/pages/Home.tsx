@@ -12,6 +12,7 @@ const SUPPORTED_PANS = [
   { key: 'baidu', name: '百度网盘 · SVIP加速' },
   { key: 'quark', name: '夸克网盘' },
   { key: 'gdrive', name: 'Google Drive' },
+  { key: 'aliyun', name: '阿里云盘' },
 ]
 
 export default function Home() {

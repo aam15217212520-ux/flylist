@@ -26,6 +26,8 @@ interface ConfigData {
   baiduAccounts: BaiduAccountView[]
   quarkConfigured: boolean
   quarkUpdatedAt: number | null
+  aliyunConfigured: boolean
+  aliyunUpdatedAt: number | null
   panEnabled: Record<string, boolean>
   panDisabledReasons: Record<string, string>
   announcement: { content: string; enabled: boolean; updatedAt: number | null }
@@ -44,6 +46,8 @@ export default function Admin() {
   const [editNote, setEditNote] = useState('')
   const [quarkCookie, setQuarkCookie] = useState('')
   const [quarkMsg, setQuarkMsg] = useState('')
+  const [aliyunRefreshToken, setAliyunRefreshToken] = useState('')
+  const [aliyunMsg, setAliyunMsg] = useState('')
   const [stats, setStats] = useState<StatsData | null>(null)
   const [announcementContent, setAnnouncementContent] = useState('')
   const [announcementEnabled, setAnnouncementEnabled] = useState(false)
@@ -165,6 +169,21 @@ export default function Admin() {
     setQuarkMsg(json.success ? '保存成功 ✓' : json.message ?? '保存失败')
     if (json.success) {
       setQuarkCookie('')
+      loadConfig()
+    }
+  }
+
+  async function handleSaveAliyun() {
+    setAliyunMsg('')
+    const res = await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aliyunRefreshToken }),
+    })
+    const json = (await res.json()) as { success: boolean; message?: string }
+    setAliyunMsg(json.success ? '保存成功 ✓' : json.message ?? '保存失败')
+    if (json.success) {
+      setAliyunRefreshToken('')
       loadConfig()
     }
   }
@@ -396,6 +415,31 @@ export default function Admin() {
       </section>
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
+        <h2 className="text-accent2 mb-1">阿里云盘账号配置</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          当前状态：
+          {config?.aliyunConfigured ? <span className="text-accent"> 已配置 ✓</span> : <span className="text-warn"> 未配置</span>}
+          {config?.aliyunUpdatedAt && (
+            <span className="ml-2 text-slate-600">更新于 {new Date(config.aliyunUpdatedAt).toLocaleString()}</span>
+          )}
+        </p>
+        <p className="text-xs text-slate-500 mb-3">
+          解析时会把分享文件转存到该账号的网盘再取直链，下载完成后会自动删除转存文件，不会长期占用网盘容量。
+        </p>
+        <label className="block text-xs text-slate-400 mb-1">Refresh Token（从浏览器登录 alipan.com 后，在 Local Storage 里查找带 token 字样的项获取）</label>
+        <input
+          value={aliyunRefreshToken}
+          onChange={(e) => setAliyunRefreshToken(e.target.value)}
+          placeholder="留空则不修改"
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
+        />
+        <button onClick={handleSaveAliyun} className="px-4 py-2 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan">
+          保存
+        </button>
+        {aliyunMsg && <span className="ml-3 text-xs text-slate-400">{aliyunMsg}</span>}
+      </section>
+
+      <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-accent2">公告栏管理</h2>
           <label className="flex items-center gap-2 text-xs text-slate-400">
@@ -431,7 +475,7 @@ export default function Admin() {
       </section>
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6">
-        <h2 className="text-accent2 mb-4">网盘解析开关</h2>
+       <h2 className="text-accent2 mb-4">网盘解析开关</h2>
         <div className="space-y-4">
           {Object.entries(PAN_LABELS).map(([key, label]) => {
             const enabled = config?.panEnabled[key] ?? true

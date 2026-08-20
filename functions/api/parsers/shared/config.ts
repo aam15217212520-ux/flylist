@@ -26,6 +26,12 @@ export interface BaiduAccount {
 export interface SiteConfig {
   baiduAccounts?: BaiduAccount[]
   quark?: { cookie: string; updatedAt: number }
+  aliyun?: {
+    refreshToken: string
+    accessToken?: string
+    accessTokenExpiresAt?: number
+    updatedAt: number
+  }
   panEnabled?: Record<string, boolean>
   /** 管理员关闭某个网盘时可以填写的自定义原因，访客解析时会看到这段提示。
    * 留空则走默认提示“该网盘解析已被管理员暂时关闭”。 */

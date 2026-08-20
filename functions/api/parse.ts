@@ -9,6 +9,7 @@ import { parseBaidu, buildBaiduProxyLink } from './parsers/baidu'
 import { parseQuark, buildQuarkProxyLink } from './parsers/quark'
 import { parseGDrive, buildGDriveProxyLink } from './parsers/gdrive'
 import { parseIlanzou } from './parsers/ilanzou'
+import { parseAliyun, buildAliyunProxyLink } from './parsers/aliyun'
 import { getCachedLink, setCachedLink } from './parsers/shared/cache'
 import { incrementStats } from './parsers/shared/stats'
 import { getSiteConfig } from './parsers/shared/config'
@@ -83,6 +84,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       case 'ilanzou':
         result = await parseIlanzou({ env, url: body.url, pwd: body.pwd })
         break
+      case 'aliyun':
+        result = await parseAliyun({ env, url: body.url, pwd: body.pwd })
+        break
     }
 
     if (isParsedFolder(result)) {
@@ -98,6 +102,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       responseLink = buildBaiduProxyLink(result.directLink, result.fileName)
     } else if (panType === 'gdrive') {
       responseLink = buildGDriveProxyLink(result.directLink, result.fileName)
+    } else if (panType === 'aliyun') {
+      responseLink = buildAliyunProxyLink(result.directLink, result.fileName)
     }
 
     await setCachedLink(env, cacheKey, responseLink)
