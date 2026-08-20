@@ -1,5 +1,6 @@
 import type { Env } from './parsers/shared/types'
 import { resolveBaiduFinalUrl, BAIDU_DOWNLOAD_UA } from './parsers/baidu'
+import { buildContentDisposition } from './parsers/shared/http'
 
 const PASSTHROUGH_RESPONSE_HEADERS = [
   'content-type',
@@ -63,11 +64,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     if (v) headers.set(h, v)
   }
 
-  const dispositionName = filename ? decodeURIComponent(filename) : undefined
-  headers.set(
-    'Content-Disposition',
-    dispositionName ? `attachment; filename*=UTF-8''${encodeURIComponent(dispositionName)}` : 'attachment',
-  )
+  const dispositionName = filename ?? undefined
+  headers.set('Content-Disposition', buildContentDisposition(dispositionName))
 
   return new Response(upstreamRes.body, {
     status: upstreamRes.status,

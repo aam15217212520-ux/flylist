@@ -1,5 +1,6 @@
 import type { Env } from './parsers/shared/types'
 import { getSiteConfig } from './parsers/shared/config'
+import { buildContentDisposition } from './parsers/shared/http'
 
 const QUARK_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/2.5.20 Chrome/100.0.4896.160 Electron/18.3.5.4-b478491100 Safari/537.36 Channel/pckk_other_ch'
@@ -73,11 +74,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     if (v) headers.set(h, v)
   }
 
-  const dispositionName = filename ? decodeURIComponent(filename) : undefined
-  headers.set(
-    'Content-Disposition',
-    dispositionName ? `attachment; filename*=UTF-8''${encodeURIComponent(dispositionName)}` : 'attachment',
-  )
+  const dispositionName = filename ?? undefined
+  headers.set('Content-Disposition', buildContentDisposition(dispositionName))
 
   return new Response(upstreamRes.body, {
     status: upstreamRes.status,
