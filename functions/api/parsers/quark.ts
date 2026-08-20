@@ -1,5 +1,5 @@
 import { fetchJson } from './shared/http'
-import type { ParsedFile, ParsedFolder, ParserContext } from './shared/types'
+import type { Env, ParsedFile, ParsedFolder, ParserContext } from './shared/types'
 import { ParseError } from './shared/types'
 import { getSiteConfig } from './shared/config'
 
@@ -106,7 +106,7 @@ export async function parseQuark(ctx: ParserContext): Promise<ParsedFile | Parse
 
   // 根目录且只有单个文件、没有子文件夹：直接返回直链，不需要访客再多点一次
   if (pdirFid === '0' && files.length === 1 && folders.length === 0) {
-    return await resolveQuarkDownload(headers, pwdId, stoken, files[0])
+    return resolveQuarkDownload(pwdId, stoken, files[0])
   }
 
   const folderItems: ParsedFolder['files'] = []
@@ -139,7 +139,7 @@ export async function parseQuark(ctx: ParserContext): Promise<ParsedFile | Parse
     if (!target) {
       throw new ParseError('未找到该文件，链接可能已失效')
     }
-    return await resolveQuarkDownload(headers, pwdId, stoken, target)
+    return resolveQuarkDownload(pwdId, stoken, target)
   }
 
   return {
@@ -149,46 +149,84 @@ export async function parseQuark(ctx: ParserContext): Promise<ParsedFile | Parse
   }
 }
 
-async function resolveQuarkDownload(
-  headers: Record<string, string>,
-  pwdId: string,
-  stoken: string,
-  file: QuarkFileItem,
-): Promise<ParsedFile> {
-  const downloadRes = await fetchJson<DownloadResp>(`${API_BASE}/file/download?pr=ucpro&fr=pc`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      fids: [file.fid],
-      pwd_id: pwdId,
-      stoken,
-      ...(file.share_fid_token ? { fids_token: [file.share_fid_token] } : {}),
-    }),
-  })
+interface QuarkDownloadToken {
+  pwdId: string
+  stoken: string
+  fid: string
+  fidsToken?: string
+}
 
-  const directLink = downloadRes.data?.[0]?.download_url
-  if (downloadRes.code === 31001) {
-    throw new ParseError('夸克网盘账号登录态已过期，请在后台更新 Cookie')
+/**
+ * 生成解析结果时不直接调用 file/download 接口拿真实直链，因为夸克 CDN 直链的签名
+ * 与“签发签名时的请求方 IP”绑定，签发和下载必须是同一个来源 IP，否则会被判定签名不符、
+ * 返回 403（跟百度网盘同一个限制）。这里只打包一个“复合令牌”（分享 token + 目标文件 fid），
+ * 真正调用 file/download 现场签发直链的动作推迟到访客点击下载、命中 /api/quark-download
+ * 代理的那一刻才执行，并在同一次请求里立刻用签发到的直链取流，从而保证 IP 一致。
+ */
+function resolveQuarkDownload(pwdId: string, stoken: string, file: QuarkFileItem): ParsedFile {
+  const token: QuarkDownloadToken = {
+    pwdId,
+    stoken,
+    fid: file.fid,
+    fidsToken: file.share_fid_token,
   }
-  if (downloadRes.code !== 0 || !directLink) {
-    throw new ParseError(downloadRes.message ?? '夸克网盘解析失败，该文件可能超出分享直链限制，需要登录网盘转存后下载')
-  }
-
   return {
     panType: 'quark',
     panName: '夸克网盘',
     fileName: file.file_name,
     fileSize: file.size ? String(file.size) : undefined,
-    directLink,
+    directLink: JSON.stringify(token),
   }
 }
 
 /**
- * 夸克网盘的下载直链只有携带账号登录 Cookie 才能访问，不能直接交给用户浏览器，
- * 因此包装成走服务端代理下载的地址，Cookie 全程留在服务端，不会暴露给访客。
+ * 在“下载代理”这一次请求内现场调用夸克接口签发下载直链并返回。
+ * 必须与实际取流请求保持同一次 Function 调用，否则签名里绑定的来源 IP 会与实际下载
+ * 请求的 IP 不一致，导致夸克返回 403。
  */
-export function buildQuarkProxyLink(rawDirectLink: string, fileName?: string): string {
-  const params = new URLSearchParams({ u: rawDirectLink })
+export async function resolveQuarkFinalUrl(env: Env, token: string): Promise<{ url: string; cookie: string }> {
+  const config = await getSiteConfig(env)
+  const cookie = config.quark?.cookie
+  if (!cookie) {
+    throw new Error('夸克网盘账号未配置')
+  }
+
+  let parsed: QuarkDownloadToken
+  try {
+    parsed = JSON.parse(token)
+  } catch {
+    throw new Error('链接参数无效，请重新解析')
+  }
+
+  const headers = quarkHeaders(cookie)
+  const downloadRes = await fetchJson<DownloadResp>(`${API_BASE}/file/download?pr=ucpro&fr=pc`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      fids: [parsed.fid],
+      pwd_id: parsed.pwdId,
+      stoken: parsed.stoken,
+      ...(parsed.fidsToken ? { fids_token: [parsed.fidsToken] } : {}),
+    }),
+  })
+
+  const directLink = downloadRes.data?.[0]?.download_url
+  if (downloadRes.code === 31001) {
+    throw new Error('夸克网盘账号登录态已过期，请在后台更新 Cookie')
+  }
+  if (downloadRes.code !== 0 || !directLink) {
+    throw new Error(downloadRes.message ?? '夸克网盘获取下载直链失败，该文件可能超出分享直链限制，或链接已失效，请重新解析')
+  }
+
+  return { url: directLink, cookie }
+}
+
+/**
+ * 夸克网盘的下载直链只有携带账号登录 Cookie 才能访问，不能直接交给用户浏览器，
+ * 因此包装成走服务端代理下载的地址，令牌（而非真实直链）全程留在服务端解析，不会暴露给访客。
+ */
+export function buildQuarkProxyLink(token: string, fileName?: string): string {
+  const params = new URLSearchParams({ token })
   if (fileName) {
     params.set('name', fileName)
   }

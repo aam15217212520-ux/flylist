@@ -1,13 +1,9 @@
 import type { Env } from './parsers/shared/types'
-import { getSiteConfig } from './parsers/shared/config'
+import { resolveQuarkFinalUrl } from './parsers/quark'
 import { buildContentDisposition } from './parsers/shared/http'
 
 const QUARK_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/2.5.20 Chrome/100.0.4896.160 Electron/18.3.5.4-b478491100 Safari/537.36 Channel/pckk_other_ch'
-
-function isAllowedQuarkHost(hostname: string): boolean {
-  return hostname === 'quark.cn' || hostname.endsWith('.quark.cn')
-}
 
 const PASSTHROUGH_RESPONSE_HEADERS = [
   'content-type',
@@ -21,35 +17,30 @@ const PASSTHROUGH_RESPONSE_HEADERS = [
 /**
  * 夸克网盘下载代理。
  *
- * 夸克网盘的直链只有携带管理员账号的登录 Cookie 才能访问（否则返回 412），
- * 而这个 Cookie 是账号的登录凭证，绝不能直接暴露给访客。
- * 因此这里由服务器代持 Cookie 向夸克 CDN 取流，再原样转发给用户浏览器，
- * 全程用户拿不到账号 Cookie，只拿到这个代理地址本身。
+ * 夸克 CDN 直链的签名与“签发签名时的请求方 IP”绑定，签发和下载必须是同一个来源 IP，
+ * 否则会被判定签名不符，返回 403（跟百度网盘同一个限制）。
+ * 因此这里把“调用 file/download 现场签发直链”这一步推迟到访客真正点击下载的这一次请求内完成，
+ * 并在同一次 Function 调用里立刻用这个直链取流转发，保证签发和下载的 IP 始终一致。
+ * 访客全程只连接本站域名，账号 Cookie 始终留在服务端。
  */
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const reqUrl = new URL(request.url)
-  const target = reqUrl.searchParams.get('u')
+  const token = reqUrl.searchParams.get('token')
   const filename = reqUrl.searchParams.get('name')
 
-  if (!target) {
-    return new Response('missing url', { status: 400 })
+  if (!token) {
+    return new Response('missing token', { status: 400 })
   }
 
-  let targetUrl: URL
+  let finalUrl: string
+  let cookie: string
   try {
-    targetUrl = new URL(target)
-  } catch {
-    return new Response('invalid url', { status: 400 })
-  }
-
-  if (targetUrl.protocol !== 'https:' || !isAllowedQuarkHost(targetUrl.hostname)) {
-    return new Response('forbidden target host', { status: 403 })
-  }
-
-  const config = await getSiteConfig(env)
-  const cookie = config.quark?.cookie
-  if (!cookie) {
-    return new Response('夸克网盘账号未配置', { status: 502 })
+    const resolved = await resolveQuarkFinalUrl(env, token)
+    finalUrl = resolved.url
+    cookie = resolved.cookie
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '夸克网盘解析失败'
+    return new Response(message, { status: 502 })
   }
 
   const upstreamHeaders: Record<string, string> = {
@@ -62,7 +53,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     upstreamHeaders.Range = range
   }
 
-  const upstreamRes = await fetch(targetUrl.toString(), { headers: upstreamHeaders })
+  const upstreamRes = await fetch(finalUrl, { headers: upstreamHeaders })
 
   if (!upstreamRes.ok && upstreamRes.status !== 206) {
     return new Response(`夸克网盘下载失败（上游状态码 ${upstreamRes.status}）`, { status: 502 })
