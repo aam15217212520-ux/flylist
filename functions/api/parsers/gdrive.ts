@@ -24,12 +24,18 @@ const ID_PATTERNS = [
   /[?&]id=([A-Za-z0-9_-]+)/,
 ]
 
+const FOLDER_PATTERN = /\/drive\/(?:u\/\d+\/)?folders\/([A-Za-z0-9_-]+)/
+
 export function extractGoogleDriveFileId(url: string): string | null {
   for (const pattern of ID_PATTERNS) {
     const match = url.match(pattern)
     if (match) return match[1]
   }
   return null
+}
+
+export function isGoogleDriveFolderUrl(url: string): boolean {
+  return FOLDER_PATTERN.test(url)
 }
 
 /** 从 Set-Cookie 响应头里提取 name=value，与已有 cookie 合并成一个 Cookie 请求头字符串 */
@@ -181,6 +187,9 @@ export async function parseGDrive(ctx: ParserContext): Promise<ParsedFile> {
   const { url } = ctx
   const fileId = extractGoogleDriveFileId(url)
   if (!fileId) {
+    if (isGoogleDriveFolderUrl(url)) {
+      throw new ParseError('暂不支持 Google Drive 文件夹分享，请使用单个文件的分享链接')
+    }
     throw new ParseError('无法识别 Google Drive 分享链接格式')
   }
 
