@@ -1,6 +1,8 @@
-export type PanType = 'lanzou' | 'chengtong' | 'feiji' | 'pan123' | 'baidu' | 'quark' | 'gdrive'
+export type PanType = 'lanzou' | 'chengtong' | 'feiji' | 'pan123' | 'baidu' | 'quark' | 'gdrive' | 'ilanzou'
 
 const HOST_RULES: Array<{ type: PanType; test: RegExp }> = [
+  // ilanzou 规则要放在 lanzou 前面：lanzou 的正则没有锚定开头，会把 "ilanzou.com" 也误判成蓝奏云
+  { type: 'ilanzou', test: /ilanzou\.com/i },
   { type: 'lanzou', test: /lanzo[a-z]{1,3}\.(com|net|org|space)/i },
   { type: 'chengtong', test: /ctfile\.com/i },
   { type: 'feiji', test: /feijipan\.com|feijix\.com/i },
@@ -30,4 +32,5 @@ export const PAN_NAMES: Record<PanType, string> = {
   baidu: '百度网盘',
   quark: '夸克网盘',
   gdrive: 'Google Drive',
+  ilanzou: '蓝奏云优享版',
 }

@@ -8,6 +8,7 @@ import { parsePan123 } from './parsers/pan123'
 import { parseBaidu, buildBaiduProxyLink } from './parsers/baidu'
 import { parseQuark, buildQuarkProxyLink } from './parsers/quark'
 import { parseGDrive, buildGDriveProxyLink } from './parsers/gdrive'
+import { parseIlanzou } from './parsers/ilanzou'
 import { getCachedLink, setCachedLink } from './parsers/shared/cache'
 import { incrementStats } from './parsers/shared/stats'
 import { getSiteConfig } from './parsers/shared/config'
@@ -74,6 +75,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         break
       case 'gdrive':
         result = await parseGDrive({ env, url: body.url, pwd: body.pwd })
+        break
+      case 'ilanzou':
+        result = await parseIlanzou({ env, url: body.url, pwd: body.pwd })
         break
     }
 

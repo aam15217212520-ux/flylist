@@ -12,6 +12,7 @@ const DEFAULT_PAN_ENABLED: Record<string, boolean> = {
   baidu: true,
   quark: true,
   gdrive: true,
+  ilanzou: true,
 }
 
 interface ConfigUpdateBody {

@@ -5,6 +5,7 @@ import Announcement from '../components/Announcement'
 
 const SUPPORTED_PANS = [
   { key: 'lanzou', name: '蓝奏云' },
+  { key: 'ilanzou', name: '蓝奏云优享版' },
   { key: 'chengtong', name: '城通网盘' },
   { key: 'feiji', name: '小飞机网盘' },
   { key: 'pan123', name: '123云盘' },
