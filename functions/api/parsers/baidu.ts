@@ -402,36 +402,9 @@ async function transferToOwnDrive(
   return { toPath: String(item.to), toFsId: String(item.to_fs_id) }
 }
 
-/** 通过 filemetas 拿账号自己文件的 dlink 签名，再用固定 User-Agent（百度服务端按此签发真实 CDN 地址，
- * 换成浏览器/curl 等常见 UA 会被判定为未授权，返回 403 hitcode:119）解析出最终的 CDN 直链。
- *
- * 注意：这个最终 CDN 直链本身也要求请求方 User-Agent 精确等于 BAIDU_DOWNLOAD_UA，
- * 而浏览器发起下载请求时无法自定义 UA，因此这里不做服务端代理转发，只把直链本身返回给前端，
- * 由用户自行用支持自定义 UA 的下载工具（如 IDM）填入该 UA 后下载。 */
+/** 百度网盘要求下载请求方 User-Agent 精确等于此值才会放行（换成浏览器/curl 等常见 UA 会被判定
+ * 为未授权，返回 403 hitcode:119）。这个值只在服务端内部请求百度时使用，不会暴露给访客。 */
 export const BAIDU_DOWNLOAD_UA = 'pan.baidu.com'
-
-async function downloadOwnFile(cookie: string, toFsId: string, bdstoken: string): Promise<string> {
-  const metaRes = await fetchJson<FileMetasResp>(
-    `https://pan.baidu.com/api/filemetas?dlink=1&fsids=%5B${toFsId}%5D&app_id=250528&channel=chunlei&web=1&clienttype=0&bdstoken=${encodeURIComponent(bdstoken)}`,
-    { headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' } },
-  )
-
-  const dlink = metaRes.info?.[0]?.dlink
-  if (metaRes.errno !== 0 || !dlink) {
-    throw new ParseError(`获取下载直链失败（错误码 ${metaRes.errno}）`)
-  }
-
-  const redirectRes = await fetch(dlink, {
-    headers: { Cookie: cookie, 'User-Agent': BAIDU_DOWNLOAD_UA },
-    redirect: 'manual',
-  })
-
-  const finalUrl = redirectRes.headers.get('location')
-  if (!finalUrl) {
-    throw new ParseError('获取下载直链失败：百度网盘未返回最终下载地址，链接可能已失效')
-  }
-  return finalUrl
-}
 
 async function resolveDownload(
   env: Env,
@@ -459,13 +432,69 @@ async function resolveDownload(
     `https://pan.baidu.com/s/${surl}`,
   )
 
-  const dlink = await downloadOwnFile(cookie, toFsId, bdstoken)
-
   return {
     panType: 'baidu',
     panName: '百度网盘',
     fileName: fallbackName,
-    directLink: dlink,
-    requiredUA: BAIDU_DOWNLOAD_UA,
+    // 复合令牌，不是真实直链：真正的 CDN 签名直链要求“签发时的请求 IP”与“下载时的请求 IP”一致，
+    // 因此不能在这里提前签发直链交给访客浏览器（浏览器出口 IP 和我方服务器不同，会被百度判定 sign error 拒绝）。
+    // 这里只记录“哪个账号 + 转存到该账号下的哪个文件”，实际签发直链推迟到访客点击下载、
+    // 命中 /api/baidu-download 代理的那一刻才现场生成，并在同一次请求里立刻使用，从而保证 IP 一致。
+    directLink: `${account.id}:${toFsId}`,
   }
+}
+
+/**
+ * 在“下载代理”这一次请求内现场签发百度 CDN 直链并返回。
+ * 必须与实际取流请求保持同一次 Function 调用，否则签名里绑定的来源 IP 会与实际下载请求的 IP 不一致，
+ * 导致百度返回 403 sign error。
+ */
+export async function resolveBaiduFinalUrl(env: Env, accountId: string, toFsId: string): Promise<string> {
+  const config = await getSiteConfig(env)
+  const account = (config.baiduAccounts ?? []).find((a) => a.id === accountId)
+  if (!account) {
+    throw new Error('百度网盘账号已被移除，链接已失效，请重新解析')
+  }
+
+  const cookie = accountCookie(account)
+
+  let bdstoken: string
+  try {
+    bdstoken = await getOwnBdsToken(cookie)
+  } catch {
+    await markBaiduAccountFailed(env, accountId, '下载时发现账号 Cookie 已失效')
+    throw new Error('百度网盘账号已失效，请重新解析该链接')
+  }
+
+  const metaRes = await fetchJson<FileMetasResp>(
+    `https://pan.baidu.com/api/filemetas?dlink=1&fsids=%5B${toFsId}%5D&app_id=250528&channel=chunlei&web=1&clienttype=0&bdstoken=${encodeURIComponent(bdstoken)}`,
+    { headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' } },
+  )
+
+  const dlink = metaRes.info?.[0]?.dlink
+  if (metaRes.errno !== 0 || !dlink) {
+    throw new Error(`获取下载直链失败（错误码 ${metaRes.errno}），文件可能已被清理，请重新解析`)
+  }
+
+  const redirectRes = await fetch(dlink, {
+    headers: { Cookie: cookie, 'User-Agent': BAIDU_DOWNLOAD_UA },
+    redirect: 'manual',
+  })
+  await redirectRes.body?.cancel()
+
+  const finalUrl = redirectRes.headers.get('location')
+  if (!finalUrl) {
+    throw new Error('百度网盘未返回最终下载地址，链接可能已失效，请重新解析')
+  }
+  return finalUrl
+}
+
+/** 把“账号 + 转存文件”复合令牌包装成前端可直接点击的下载代理地址，账号 Cookie 始终留在服务端。 */
+export function buildBaiduProxyLink(rawToken: string, fileName?: string): string {
+  const [accountId, toFsId] = rawToken.split(':')
+  const params = new URLSearchParams({ accountId, fsId: toFsId })
+  if (fileName) {
+    params.set('name', fileName)
+  }
+  return `/api/baidu-download?${params.toString()}`
 }

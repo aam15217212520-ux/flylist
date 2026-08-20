@@ -5,9 +5,6 @@ export interface ParseResultData {
   fileSize?: string
   directLink: string
   cacheHit?: boolean
-  /** 仅百度网盘会带这个字段：直链要求下载方 User-Agent 精确匹配此值，
-   * 浏览器无法直接下载，需引导用户用 IDM 等工具手动填入该 UA 后下载。 */
-  requiredUA?: string
 }
 
 export interface ParseFolderFile {

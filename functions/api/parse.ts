@@ -5,7 +5,7 @@ import { parseLanzou } from './parsers/lanzou'
 import { parseChengtong } from './parsers/chengtong'
 import { parseFeiji } from './parsers/feiji'
 import { parsePan123 } from './parsers/pan123'
-import { parseBaidu, BAIDU_DOWNLOAD_UA } from './parsers/baidu'
+import { parseBaidu, buildBaiduProxyLink } from './parsers/baidu'
 import { parseQuark, buildQuarkProxyLink } from './parsers/quark'
 import { getCachedLink, setCachedLink } from './parsers/shared/cache'
 import { incrementStats } from './parsers/shared/stats'
@@ -45,7 +45,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         panName: PAN_NAMES[panType],
         directLink: cached,
         cacheHit: true,
-        requiredUA: panType === 'baidu' ? BAIDU_DOWNLOAD_UA : undefined,
       },
     })
   }
@@ -78,10 +77,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       return Response.json({ success: true, isFolder: true, data: result })
     }
 
-    // 夸克网盘直链只有携带账号 Cookie 才能访问，不能把裸链接交给浏览器，
-    // 这里换成走服务器代理下载的地址（Cookie 留在服务端），再缓存/返回这个代理地址。
-    const responseLink =
-      panType === 'quark' ? buildQuarkProxyLink(result.directLink, result.fileName) : result.directLink
+    // 多个网盘的直链不能直接交给浏览器（夸克需要账号 Cookie，百度需要签发/下载同一 IP），
+    // 这里换成走服务器代理下载的地址（Cookie/签名留在服务端），再缓存/返回这个代理地址。
+    let responseLink = result.directLink
+    if (panType === 'quark') {
+      responseLink = buildQuarkProxyLink(result.directLink, result.fileName)
+    } else if (panType === 'baidu') {
+      responseLink = buildBaiduProxyLink(result.directLink, result.fileName)
+    }
 
     await setCachedLink(env, cacheKey, responseLink)
     await incrementStats(env, panType)
