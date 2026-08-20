@@ -480,12 +480,21 @@ export async function resolveBaiduFinalUrl(env: Env, accountId: string, toFsId: 
     headers: { Cookie: cookie, 'User-Agent': BAIDU_DOWNLOAD_UA },
     redirect: 'manual',
   })
-  await redirectRes.body?.cancel()
 
   const finalUrl = redirectRes.headers.get('location')
   if (!finalUrl) {
-    throw new Error('百度网盘未返回最终下载地址，链接可能已失效，请重新解析')
+    // 正常情况下百度会用 302 + Location 头返回最终 CDN 直链。
+    // 如果没有 Location，大概率是 dlink 本身直接返回了文件内容（状态码 200），
+    // 此时 dlink 就是可以直接使用的最终地址；否则才是真的失败（比如返回了错误提示页面）。
+    await redirectRes.body?.cancel()
+    if (redirectRes.status >= 200 && redirectRes.status < 300) {
+      return dlink
+    }
+    throw new Error(
+      `百度网盘未返回最终下载地址（上游状态码 ${redirectRes.status}），链接可能已失效，请重新解析`,
+    )
   }
+  await redirectRes.body?.cancel()
   return finalUrl
 }
 
