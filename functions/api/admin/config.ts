@@ -11,6 +11,7 @@ const DEFAULT_PAN_ENABLED: Record<string, boolean> = {
   pan123: true,
   baidu: true,
   quark: true,
+  gdrive: true,
 }
 
 interface ConfigUpdateBody {

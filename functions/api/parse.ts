@@ -7,6 +7,7 @@ import { parseFeiji } from './parsers/feiji'
 import { parsePan123 } from './parsers/pan123'
 import { parseBaidu, buildBaiduProxyLink } from './parsers/baidu'
 import { parseQuark, buildQuarkProxyLink } from './parsers/quark'
+import { parseGDrive, buildGDriveProxyLink } from './parsers/gdrive'
 import { getCachedLink, setCachedLink } from './parsers/shared/cache'
 import { incrementStats } from './parsers/shared/stats'
 import { getSiteConfig } from './parsers/shared/config'
@@ -71,6 +72,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       case 'quark':
         result = await parseQuark({ env, url: body.url, pwd: body.pwd })
         break
+      case 'gdrive':
+        result = await parseGDrive({ env, url: body.url, pwd: body.pwd })
+        break
     }
 
     if (isParsedFolder(result)) {
@@ -84,6 +88,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       responseLink = buildQuarkProxyLink(result.directLink, result.fileName)
     } else if (panType === 'baidu') {
       responseLink = buildBaiduProxyLink(result.directLink, result.fileName)
+    } else if (panType === 'gdrive') {
+      responseLink = buildGDriveProxyLink(result.directLink, result.fileName)
     }
 
     await setCachedLink(env, cacheKey, responseLink)

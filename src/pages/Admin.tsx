@@ -8,6 +8,7 @@ const PAN_LABELS: Record<string, string> = {
   pan123: '123云盘',
   baidu: '百度网盘',
   quark: '夸克网盘',
+  gdrive: 'Google Drive',
 }
 
 interface BaiduAccountView {
