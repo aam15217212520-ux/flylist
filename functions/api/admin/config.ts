@@ -18,6 +18,7 @@ const DEFAULT_PAN_ENABLED: Record<string, boolean> = {
 interface ConfigUpdateBody {
   quarkCookie?: string
   panEnabled?: Record<string, boolean>
+  panDisabledReasons?: Record<string, string>
   announcement?: { content: string; enabled: boolean }
   addBaiduAccount?: { cookie: string; note?: string }
   editBaiduAccount?: { id: string; cookie?: string; note?: string }
@@ -51,6 +52,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       quarkConfigured: Boolean(config.quark?.cookie),
       quarkUpdatedAt: config.quark?.updatedAt ?? null,
       panEnabled: { ...DEFAULT_PAN_ENABLED, ...(config.panEnabled ?? {}) },
+      panDisabledReasons: config.panDisabledReasons ?? {},
       announcement: {
         content: config.announcement?.content ?? '',
         enabled: config.announcement?.enabled ?? false,
@@ -123,6 +125,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   if (body.panEnabled) {
     config.panEnabled = { ...DEFAULT_PAN_ENABLED, ...config.panEnabled, ...body.panEnabled }
+  }
+
+  if (body.panDisabledReasons) {
+    config.panDisabledReasons = { ...(config.panDisabledReasons ?? {}), ...body.panDisabledReasons }
   }
 
   if (body.announcement) {

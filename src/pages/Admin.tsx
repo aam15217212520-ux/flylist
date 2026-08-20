@@ -27,6 +27,7 @@ interface ConfigData {
   quarkConfigured: boolean
   quarkUpdatedAt: number | null
   panEnabled: Record<string, boolean>
+  panDisabledReasons: Record<string, string>
   announcement: { content: string; enabled: boolean; updatedAt: number | null }
 }
 
@@ -188,6 +189,17 @@ export default function Admin() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ panEnabled: { [pan]: enabled } }),
+    })
+  }
+
+  async function savePanDisabledReason(pan: string, reason: string) {
+    if (!config) return
+    const nextReasons = { ...config.panDisabledReasons, [pan]: reason }
+    setConfig({ ...config, panDisabledReasons: nextReasons })
+    await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ panDisabledReasons: { [pan]: reason } }),
     })
   }
 
@@ -420,18 +432,42 @@ export default function Admin() {
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6">
         <h2 className="text-accent2 mb-4">网盘解析开关</h2>
-        <div className="space-y-3">
-          {Object.entries(PAN_LABELS).map(([key, label]) => (
-            <label key={key} className="flex items-center justify-between text-sm">
-              <span>{label}</span>
-              <input
-                type="checkbox"
-                checked={config?.panEnabled[key] ?? true}
-                onChange={(e) => togglePan(key, e.target.checked)}
-                className="accent-accent w-4 h-4"
-              />
-            </label>
-          ))}
+        <div className="space-y-4">
+          {Object.entries(PAN_LABELS).map(([key, label]) => {
+            const enabled = config?.panEnabled[key] ?? true
+            return (
+              <div key={key} className="border-b border-slate-800/60 last:border-b-0 pb-3 last:pb-0">
+                <div className="flex items-center justify-between text-sm">
+                  <span>{label}</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={enabled}
+                    aria-label={`${label} 解析开关`}
+                    onClick={() => togglePan(key, !enabled)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      enabled ? 'bg-accent' : 'bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-black transition-transform ${
+                        enabled ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+                {!enabled && (
+                  <input
+                    type="text"
+                    defaultValue={config?.panDisabledReasons[key] ?? ''}
+                    onBlur={(e) => savePanDisabledReason(key, e.target.value)}
+                    placeholder="关闭原因（选填，留空则显示默认提示）"
+                    className="mt-2 w-full bg-black/40 border border-slate-700 focus:border-accent2 rounded px-3 py-1.5 text-xs outline-none text-slate-200"
+                  />
+                )}
+              </div>
+            )
+          })}
         </div>
       </section>
 

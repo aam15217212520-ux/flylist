@@ -33,7 +33,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   const config = await getSiteConfig(env)
   if (config.panEnabled && config.panEnabled[panType] === false) {
-    return Response.json({ success: false, message: '该网盘解析已被管理员暂时关闭' }, { status: 403 })
+    const reason = config.panDisabledReasons?.[panType]?.trim()
+    return Response.json(
+      { success: false, message: reason || '该网盘解析已被管理员暂时关闭' },
+      { status: 403 },
+    )
   }
 
   const cacheKey = `${panType}:${body.url}:${body.pwd ?? ''}`
