@@ -60,6 +60,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       aliyunUpdatedAt: config.aliyun?.updatedAt ?? null,
       cloud189Configured: Boolean(config.cloud189?.cookieLoginUser),
       cloud189UpdatedAt: config.cloud189?.updatedAt ?? null,
+      cloud189LastError: config.cloud189?.lastAccessTokenError ?? null,
       panEnabled: { ...DEFAULT_PAN_ENABLED, ...(config.panEnabled ?? {}) },
       panDisabledReasons: config.panDisabledReasons ?? {},
       announcement: {

@@ -38,6 +38,7 @@ export interface SiteConfig {
     openAccessToken?: string
     openAccessTokenExpiresAt?: number
     updatedAt: number
+    lastAccessTokenError?: string
   }
   panEnabled?: Record<string, boolean>
   /** 管理员关闭某个网盘时可以填写的自定义原因，访客解析时会看到这段提示。

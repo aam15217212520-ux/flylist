@@ -82,8 +82,7 @@ async function getOpenAccessToken(sessionKey: string): Promise<{ token: string; 
     },
   )
   if (!resp.accessToken) {
-    console.error('[cloud189] getOpenAccessToken failed, resp:', JSON.stringify(resp))
-    throw new ParseError('天翼云盘获取访问令牌失败，账号登录态可能已失效')
+    throw new ParseError(`天翼云盘获取访问令牌失败，账号登录态可能已失效（${JSON.stringify(resp)}）`)
   }
   // expiresIn 返回的是绝对时间戳（毫秒），不是有效期秒数
   return { token: resp.accessToken, expiresAt: resp.expiresIn ?? Date.now() + 24 * 3600 * 1000 }
@@ -100,14 +99,39 @@ async function getValidAccessToken(env: Env): Promise<string> {
     return cloud189.openAccessToken
   }
 
-  const sessionKey = await getWebSessionKey(cloud189.cookieLoginUser, cloud189.sson)
-  const { token, expiresAt } = await getOpenAccessToken(sessionKey)
+  let sessionKey: string
+  try {
+    sessionKey = await getWebSessionKey(cloud189.cookieLoginUser, cloud189.sson)
+  } catch (error) {
+    config.cloud189 = {
+      ...cloud189,
+      lastAccessTokenError: `sessionKey: ${error instanceof Error ? error.message : String(error)}`,
+    }
+    await saveSiteConfig(env, config)
+    throw error
+  }
+
+  let token: string
+  let expiresAt: number
+  try {
+    const result = await getOpenAccessToken(sessionKey)
+    token = result.token
+    expiresAt = result.expiresAt
+  } catch (error) {
+    config.cloud189 = {
+      ...cloud189,
+      lastAccessTokenError: `accessToken: ${error instanceof Error ? error.message : String(error)}`,
+    }
+    await saveSiteConfig(env, config)
+    throw error
+  }
 
   config.cloud189 = {
     ...cloud189,
     openAccessToken: token,
     openAccessTokenExpiresAt: expiresAt,
     updatedAt: Date.now(),
+    lastAccessTokenError: undefined,
   }
   await saveSiteConfig(env, config)
   return token
