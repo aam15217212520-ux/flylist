@@ -56,7 +56,10 @@ export default function Home() {
           </button>
         </p>
         <p>本站不存储任何文件，所有直链均来自网盘官方接口临时授权 · 仅供学习交流</p>
-        <p>Powered by FlyAi Studio &amp; Kele Studio</p>
+        <p className="flex items-center justify-center gap-1.5 pt-1">
+          <img src="/logo-kele.png" alt="KeLe Studio" className="h-4 w-4" />
+          Powered by FlyAi Studio &amp; KeLe Studio
+        </p>
         <p className="pt-2">
           <a href="/admin" className="hover:text-accent2">
             管理后台 →
