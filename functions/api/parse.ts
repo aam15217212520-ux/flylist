@@ -10,6 +10,7 @@ import { parseQuark, buildQuarkProxyLink } from './parsers/quark'
 import { parseGDrive, buildGDriveProxyLink } from './parsers/gdrive'
 import { parseIlanzou } from './parsers/ilanzou'
 import { parseAliyun, buildAliyunProxyLink } from './parsers/aliyun'
+import { parseCloud189 } from './parsers/cloud189'
 import { getCachedLink, setCachedLink } from './parsers/shared/cache'
 import { incrementStats } from './parsers/shared/stats'
 import { getSiteConfig } from './parsers/shared/config'
@@ -86,6 +87,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         break
       case 'aliyun':
         result = await parseAliyun({ env, url: body.url, pwd: body.pwd })
+        break
+      case 'cloud189':
+        result = await parseCloud189({ env, url: body.url, pwd: body.pwd })
         break
     }
 

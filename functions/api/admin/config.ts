@@ -14,11 +14,14 @@ const DEFAULT_PAN_ENABLED: Record<string, boolean> = {
   gdrive: true,
   ilanzou: true,
   aliyun: true,
+  cloud189: true,
 }
 
 interface ConfigUpdateBody {
   quarkCookie?: string
   aliyunRefreshToken?: string
+  cloud189CookieLoginUser?: string
+  cloud189Sson?: string
   panEnabled?: Record<string, boolean>
   panDisabledReasons?: Record<string, string>
   announcement?: { content: string; enabled: boolean }
@@ -55,6 +58,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       quarkUpdatedAt: config.quark?.updatedAt ?? null,
       aliyunConfigured: Boolean(config.aliyun?.refreshToken),
       aliyunUpdatedAt: config.aliyun?.updatedAt ?? null,
+      cloud189Configured: Boolean(config.cloud189?.cookieLoginUser),
+      cloud189UpdatedAt: config.cloud189?.updatedAt ?? null,
       panEnabled: { ...DEFAULT_PAN_ENABLED, ...(config.panEnabled ?? {}) },
       panDisabledReasons: config.panDisabledReasons ?? {},
       announcement: {
@@ -130,6 +135,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (body.aliyunRefreshToken) {
     config.aliyun = {
       refreshToken: body.aliyunRefreshToken,
+      updatedAt: Date.now(),
+    }
+  }
+
+  if (body.cloud189CookieLoginUser) {
+    config.cloud189 = {
+      cookieLoginUser: body.cloud189CookieLoginUser,
+      sson: body.cloud189Sson || undefined,
       updatedAt: Date.now(),
     }
   }

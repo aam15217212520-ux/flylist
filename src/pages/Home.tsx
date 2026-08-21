@@ -13,6 +13,7 @@ const SUPPORTED_PANS = [
   { key: 'quark', name: '夸克网盘' },
   { key: 'gdrive', name: 'Google Drive' },
   { key: 'aliyun', name: '阿里云盘' },
+  { key: 'cloud189', name: '天翼云盘' },
 ]
 
 export default function Home() {

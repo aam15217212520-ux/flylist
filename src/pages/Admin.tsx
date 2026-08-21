@@ -10,6 +10,8 @@ const PAN_LABELS: Record<string, string> = {
   quark: '夸克网盘',
   gdrive: 'Google Drive',
   ilanzou: '蓝奏云优享版',
+  aliyun: '阿里云盘',
+  cloud189: '天翼云盘',
 }
 
 interface BaiduAccountView {
@@ -28,6 +30,8 @@ interface ConfigData {
   quarkUpdatedAt: number | null
   aliyunConfigured: boolean
   aliyunUpdatedAt: number | null
+  cloud189Configured: boolean
+  cloud189UpdatedAt: number | null
   panEnabled: Record<string, boolean>
   panDisabledReasons: Record<string, string>
   announcement: { content: string; enabled: boolean; updatedAt: number | null }
@@ -48,6 +52,9 @@ export default function Admin() {
   const [quarkMsg, setQuarkMsg] = useState('')
   const [aliyunRefreshToken, setAliyunRefreshToken] = useState('')
   const [aliyunMsg, setAliyunMsg] = useState('')
+  const [cloud189CookieLoginUser, setCloud189CookieLoginUser] = useState('')
+  const [cloud189Sson, setCloud189Sson] = useState('')
+  const [cloud189Msg, setCloud189Msg] = useState('')
   const [stats, setStats] = useState<StatsData | null>(null)
   const [announcementContent, setAnnouncementContent] = useState('')
   const [announcementEnabled, setAnnouncementEnabled] = useState(false)
@@ -184,6 +191,22 @@ export default function Admin() {
     setAliyunMsg(json.success ? '保存成功 ✓' : json.message ?? '保存失败')
     if (json.success) {
       setAliyunRefreshToken('')
+      loadConfig()
+    }
+  }
+
+  async function handleSaveCloud189() {
+    setCloud189Msg('')
+    const res = await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cloud189CookieLoginUser, cloud189Sson }),
+    })
+    const json = (await res.json()) as { success: boolean; message?: string }
+    setCloud189Msg(json.success ? '保存成功 ✓' : json.message ?? '保存失败')
+    if (json.success) {
+      setCloud189CookieLoginUser('')
+      setCloud189Sson('')
       loadConfig()
     }
   }
@@ -437,6 +460,38 @@ export default function Admin() {
           保存
         </button>
         {aliyunMsg && <span className="ml-3 text-xs text-slate-400">{aliyunMsg}</span>}
+      </section>
+
+      <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
+        <h2 className="text-accent2 mb-1">天翼云盘账号配置</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          当前状态：
+          {config?.cloud189Configured ? <span className="text-accent"> 已配置 ✓</span> : <span className="text-warn"> 未配置</span>}
+          {config?.cloud189UpdatedAt && (
+            <span className="ml-2 text-slate-600">更新于 {new Date(config.cloud189UpdatedAt).toLocaleString()}</span>
+          )}
+        </p>
+        <p className="text-xs text-slate-500 mb-3">
+          登录 cloud.189.cn 后，F12 → 应用程序/Application → Cookies → 找到名字正好叫 COOKIE_LOGIN_USER 的那一项，复制它的值。如果旁边还有个叫 SSON 的项，也一并复制。
+        </p>
+        <label className="block text-xs text-slate-400 mb-1">COOKIE_LOGIN_USER</label>
+        <input
+          value={cloud189CookieLoginUser}
+          onChange={(e) => setCloud189CookieLoginUser(e.target.value)}
+          placeholder="留空则不修改"
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
+        />
+        <label className="block text-xs text-slate-400 mb-1">SSON（可选）</label>
+        <input
+          value={cloud189Sson}
+          onChange={(e) => setCloud189Sson(e.target.value)}
+          placeholder="留空则不修改"
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
+        />
+        <button onClick={handleSaveCloud189} className="px-4 py-2 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan">
+          保存
+        </button>
+        {cloud189Msg && <span className="ml-3 text-xs text-slate-400">{cloud189Msg}</span>}
       </section>
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
