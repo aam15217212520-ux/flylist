@@ -422,7 +422,7 @@ async function resolveDownload(
   await ensureParseDir(env, account, cookie, bdstoken)
 
   const randsk = decodeSecKey(seckey)
-  const { toFsId } = await transferToOwnDrive(
+  const { toPath, toFsId } = await transferToOwnDrive(
     cookie,
     shareid,
     uk,
@@ -432,10 +432,15 @@ async function resolveDownload(
     `https://pan.baidu.com/s/${surl}`,
   )
 
+  // share/wxlist 返回的 server_filename 个别分享会是空字符串，此时改用转存后
+  // 账号自己网盘里的真实路径（toPath，如 /parse_file/真实文件名.mp4）取文件名兜底，
+  // 避免访客下载时因为拿不到文件名，被浏览器/下载管理器猜成 .bin 后缀
+  const resolvedName = fallbackName?.trim() || toPath.split('/').pop() || undefined
+
   return {
     panType: 'baidu',
     panName: '百度网盘',
-    fileName: fallbackName,
+    fileName: resolvedName,
     // 复合令牌，不是真实直链：真正的 CDN 签名直链要求“签发时的请求 IP”与“下载时的请求 IP”一致，
     // 因此不能在这里提前签发直链交给访客浏览器（浏览器出口 IP 和我方服务器不同，会被百度判定 sign error 拒绝）。
     // 这里只记录“哪个账号 + 转存到该账号下的哪个文件”，实际签发直链推迟到访客点击下载、
