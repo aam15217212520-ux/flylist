@@ -75,7 +75,12 @@ async function getValidAccessToken(env: Env): Promise<string> {
 }
 
 function extractShareId(url: string): { shareId: string; extractedPwd: string | null } | null {
-  const patterns = [/alipan\.com\/s\/([a-zA-Z0-9]+)/i, /aliyundrive\.com\/s\/([a-zA-Z0-9]+)/i]
+  const patterns = [
+    /alipan\.com\/s\/([a-zA-Z0-9]+)/i,
+    /aliyundrive\.com\/s\/([a-zA-Z0-9]+)/i,
+    /alipan\.com\/t\/([a-zA-Z0-9]+)/i,
+    /aliyundrive\.com\/t\/([a-zA-Z0-9]+)/i,
+  ]
   for (const pattern of patterns) {
     const match = url.match(pattern)
     if (match) return { shareId: match[1], extractedPwd: null }
