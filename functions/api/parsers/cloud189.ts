@@ -82,6 +82,7 @@ async function getOpenAccessToken(sessionKey: string): Promise<{ token: string; 
     },
   )
   if (!resp.accessToken) {
+    console.error('[cloud189] getOpenAccessToken failed, resp:', JSON.stringify(resp))
     throw new ParseError('天翼云盘获取访问令牌失败，账号登录态可能已失效')
   }
   // expiresIn 返回的是绝对时间戳（毫秒），不是有效期秒数
