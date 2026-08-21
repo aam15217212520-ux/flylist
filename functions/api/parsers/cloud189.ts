@@ -68,8 +68,13 @@ interface AccessTokenResp {
   errorCode?: string
 }
 
-/** 用 sessionKey 换取 openAccessToken（有效期较长，几十天量级），供 Open API 使用 */
-async function getOpenAccessToken(sessionKey: string): Promise<{ token: string; expiresAt: number }> {
+/** 用 sessionKey 换取 openAccessToken（有效期较长，几十天量级），供 Open API 使用。
+ * 携带与换取 sessionKey 时相同的 Cookie，规避服务端“sessionKey 换取 IP 与登录 IP 不一致”的校验。 */
+async function getOpenAccessToken(
+  sessionKey: string,
+  cookieLoginUser: string,
+  sson?: string,
+): Promise<{ token: string; expiresAt: number }> {
   const resp = await fetchJson<AccessTokenResp>(
     `${PORTAL_BASE}/open/oauth2/getAccessTokenBySsKey.action?noCache=${Math.random()}&sessionKey=${sessionKey}`,
     {
@@ -78,6 +83,7 @@ async function getOpenAccessToken(sessionKey: string): Promise<{ token: string; 
         Accept: 'application/json;charset=UTF-8',
         appkey: APP_KEY,
         Referer: REFERER,
+        Cookie: cookieHeader(cookieLoginUser, sson),
       },
     },
   )
@@ -114,7 +120,7 @@ async function getValidAccessToken(env: Env): Promise<string> {
   let token: string
   let expiresAt: number
   try {
-    const result = await getOpenAccessToken(sessionKey)
+    const result = await getOpenAccessToken(sessionKey, cloud189.cookieLoginUser, cloud189.sson)
     token = result.token
     expiresAt = result.expiresAt
   } catch (error) {
