@@ -118,6 +118,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       data: { ...result, directLink: responseLink, cacheHit: false },
     })
   } catch (error) {
+    console.error('[parse] error:', error instanceof Error ? error.stack : error)
     const message = error instanceof ParseError ? error.message : '解析失败，请检查链接或稍后重试'
     const fallbackUrl = error instanceof ParseError ? error.fallbackUrl : undefined
     return Response.json({ success: false, message, fallbackUrl }, { status: 502 })

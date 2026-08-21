@@ -21,12 +21,9 @@ async function md5(str: string): Promise<string> {
 
 /** Open API 用的签名：md5(拼接后的字符串)，取十六进制结果再当十进制大整数转回十六进制（Java BigInteger 习惯写法） */
 async function javaMd5(str: string): Promise<string> {
-  const data = new TextEncoder().encode(str)
-  const digest = await crypto.subtle.digest('MD5', data)
-  const hex = Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-  return BigInt(`0x${hex}`).toString(16)
+  // 注意：不能用 BigInt('0x' + hex).toString(16) 模拟，那样会丢失十六进制字符串开头的 0
+  // （BigInt 是数值运算，0x0abc 和 0xabc 数值相等，但字符串长度不同），导致签名间歇性不匹配
+  return md5(str)
 }
 
 function cookieHeader(cookieLoginUser: string, sson?: string): string {
@@ -309,14 +306,14 @@ async function getFileDownloadUrl(accessToken: string, fileId: string, shareId: 
     `${OPEN_BASE}/file/getFileDownloadUrl.action?fileId=${fileId}&dt=1&shareId=${shareId}`,
     {
       headers: {
-        accept: 'application/json;charset=UTF-8',
+        Accept: 'application/json;charset=UTF-8',
         accesstoken: accessToken,
         'sign-type': '1',
         signature,
         timestamp,
         origin: 'https://h5.cloud.189.cn',
         referer: 'https://h5.cloud.189.cn/',
-        'user-agent':
+        'User-Agent':
           'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36',
       },
     },
