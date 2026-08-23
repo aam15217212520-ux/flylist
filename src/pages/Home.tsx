@@ -11,8 +11,10 @@ const SUPPORTED_PANS = [
   { key: 'pan123', name: '123云盘' },
   { key: 'baidu', name: '百度网盘 · SVIP加速' },
   { key: 'quark', name: '夸克网盘' },
+  { key: 'uc', name: 'UC 网盘' },
   { key: 'gdrive', name: 'Google Drive' },
   { key: 'aliyun', name: '阿里云盘' },
+  { key: 'xunlei', name: '迅雷网盘' },
   { key: 'cloud189', name: '天翼云盘' },
 ]
 
