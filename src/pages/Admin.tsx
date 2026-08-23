@@ -12,6 +12,8 @@ const PAN_LABELS: Record<string, string> = {
   ilanzou: '蓝奏云优享版',
   aliyun: '阿里云盘',
   cloud189: '天翼云盘',
+  uc: 'UC 网盘',
+  xunlei: '迅雷网盘',
 }
 
 interface BaiduAccountView {
@@ -28,8 +30,12 @@ interface ConfigData {
   baiduAccounts: BaiduAccountView[]
   quarkConfigured: boolean
   quarkUpdatedAt: number | null
+  ucConfigured: boolean
+  ucUpdatedAt: number | null
   aliyunConfigured: boolean
   aliyunUpdatedAt: number | null
+  xunleiConfigured: boolean
+  xunleiUpdatedAt: number | null
   cloud189Configured: boolean
   cloud189UpdatedAt: number | null
   panEnabled: Record<string, boolean>
@@ -55,6 +61,10 @@ export default function Admin() {
   const [cloud189CookieLoginUser, setCloud189CookieLoginUser] = useState('')
   const [cloud189Sson, setCloud189Sson] = useState('')
   const [cloud189Msg, setCloud189Msg] = useState('')
+  const [ucCookie, setUcCookie] = useState('')
+  const [ucMsg, setUcMsg] = useState('')
+  const [xunleiRefreshToken, setXunleiRefreshToken] = useState('')
+  const [xunleiMsg, setXunleiMsg] = useState('')
   const [stats, setStats] = useState<StatsData | null>(null)
   const [announcementContent, setAnnouncementContent] = useState('')
   const [announcementEnabled, setAnnouncementEnabled] = useState(false)
@@ -207,6 +217,36 @@ export default function Admin() {
     if (json.success) {
       setCloud189CookieLoginUser('')
       setCloud189Sson('')
+      loadConfig()
+    }
+  }
+
+  async function handleSaveUc() {
+    setUcMsg('')
+    const res = await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ucCookie }),
+    })
+    const json = (await res.json()) as { success: boolean; message?: string }
+    setUcMsg(json.success ? '保存成功 ✓' : json.message ?? '保存失败')
+    if (json.success) {
+      setUcCookie('')
+      loadConfig()
+    }
+  }
+
+  async function handleSaveXunlei() {
+    setXunleiMsg('')
+    const res = await fetch('/api/admin/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ xunleiRefreshToken }),
+    })
+    const json = (await res.json()) as { success: boolean; message?: string }
+    setXunleiMsg(json.success ? '保存成功 ✓' : json.message ?? '保存失败')
+    if (json.success) {
+      setXunleiRefreshToken('')
       loadConfig()
     }
   }
@@ -438,6 +478,35 @@ export default function Admin() {
       </section>
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
+        <h2 className="text-accent2 mb-1">UC 网盘账号配置</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          当前状态：
+          {config?.ucConfigured ? <span className="text-accent"> 已配置 ✓</span> : <span className="text-warn"> 未配置</span>}
+          {config?.ucUpdatedAt && (
+            <span className="ml-2 text-slate-600">更新于 {new Date(config.ucUpdatedAt).toLocaleString()}</span>
+          )}
+        </p>
+        <p className="text-xs text-slate-500 mb-3">
+          架构与夸克网盘完全一致（阿里系 quark_uc 同源）。下载直链的签名绑定签发时的 Cookie 与 IP，
+          因此解析只返回令牌，访客点击下载时才现场签发并代理取流。
+        </p>
+        <p className="text-xs text-warn/80 mb-3">
+          粘贴时不要带 <code className="text-slate-300">uc:</code> 之类的前缀标签，否则所有请求会返回 500（code 15000）。
+        </p>
+        <label className="block text-xs text-slate-400 mb-1">Cookie（登录 drive.uc.cn 后按 F12 → Network → 任选一个请求 → 复制完整 Cookie 请求头）</label>
+        <input
+          value={ucCookie}
+          onChange={(e) => setUcCookie(e.target.value)}
+          placeholder="留空则不修改"
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
+        />
+        <button onClick={handleSaveUc} className="px-4 py-2 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan">
+          保存
+        </button>
+        {ucMsg && <span className="ml-3 text-xs text-slate-400">{ucMsg}</span>}
+      </section>
+
+      <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
         <h2 className="text-accent2 mb-1">阿里云盘账号配置</h2>
         <p className="text-xs text-slate-500 mb-4">
           当前状态：
@@ -460,6 +529,38 @@ export default function Admin() {
           保存
         </button>
         {aliyunMsg && <span className="ml-3 text-xs text-slate-400">{aliyunMsg}</span>}
+      </section>
+
+      <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">
+        <h2 className="text-accent2 mb-1">迅雷网盘账号配置</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          当前状态：
+          {config?.xunleiConfigured ? <span className="text-accent"> 已配置 ✓</span> : <span className="text-warn"> 未配置</span>}
+          {config?.xunleiUpdatedAt && (
+            <span className="ml-2 text-slate-600">更新于 {new Date(config.xunleiUpdatedAt).toLocaleString()}</span>
+          )}
+        </p>
+        <p className="text-xs text-slate-500 mb-3">
+          解析时会把分享文件转存到该账号的网盘再取直链，访客开始下载后自动删除转存文件，不会长期占用容量。
+          若分享本身就是该账号发出的，则跳过转存直接签发直链，也不会删除你自己的文件。
+        </p>
+        <p className="text-xs text-warn/80 mb-3">
+          迅雷每次刷新都会轮换 refresh token 并立即作废旧值。请填入<b>最新</b>的一个；
+          同时用浏览器登录迅雷网页版会与本站争抢同一条 token 链，导致解析间歇失效。
+        </p>
+        <label className="block text-xs text-slate-400 mb-1">
+          Refresh Token（登录 pan.xunlei.com 后按 F12 → Application → Local Storage → 展开 <code className="text-slate-300">credentials_Xqp0kJBXWhwaTpB6</code> → 取其中的 refresh_token 字段）
+        </label>
+        <input
+          value={xunleiRefreshToken}
+          onChange={(e) => setXunleiRefreshToken(e.target.value)}
+          placeholder="留空则不修改"
+          className="w-full bg-black/40 border border-slate-700 focus:border-accent rounded px-3 py-2 text-sm outline-none text-slate-200 mb-4"
+        />
+        <button onClick={handleSaveXunlei} className="px-4 py-2 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan">
+          保存
+        </button>
+        {xunleiMsg && <span className="ml-3 text-xs text-slate-400">{xunleiMsg}</span>}
       </section>
 
       <section className="bg-panel border border-accent/20 rounded-lg p-6 mb-6">

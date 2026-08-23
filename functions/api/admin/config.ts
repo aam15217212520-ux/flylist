@@ -11,15 +11,19 @@ const DEFAULT_PAN_ENABLED: Record<string, boolean> = {
   pan123: true,
   baidu: true,
   quark: true,
+  uc: true,
   gdrive: true,
   ilanzou: true,
   aliyun: true,
   cloud189: true,
+  xunlei: true,
 }
 
 interface ConfigUpdateBody {
   quarkCookie?: string
+  ucCookie?: string
   aliyunRefreshToken?: string
+  xunleiRefreshToken?: string
   cloud189CookieLoginUser?: string
   cloud189Sson?: string
   panEnabled?: Record<string, boolean>
@@ -56,8 +60,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       baiduAccounts: (config.baiduAccounts ?? []).map(publicAccount),
       quarkConfigured: Boolean(config.quark?.cookie),
       quarkUpdatedAt: config.quark?.updatedAt ?? null,
+      ucConfigured: Boolean(config.uc?.cookie),
+      ucUpdatedAt: config.uc?.updatedAt ?? null,
       aliyunConfigured: Boolean(config.aliyun?.refreshToken),
       aliyunUpdatedAt: config.aliyun?.updatedAt ?? null,
+      xunleiConfigured: Boolean(config.xunlei?.refreshToken),
+      xunleiUpdatedAt: config.xunlei?.updatedAt ?? null,
       cloud189Configured: Boolean(config.cloud189?.cookieLoginUser),
       cloud189UpdatedAt: config.cloud189?.updatedAt ?? null,
       cloud189LastError: config.cloud189?.lastAccessTokenError ?? null,
@@ -133,9 +141,23 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
+  if (body.ucCookie) {
+    config.uc = {
+      cookie: body.ucCookie,
+      updatedAt: Date.now(),
+    }
+  }
+
   if (body.aliyunRefreshToken) {
     config.aliyun = {
       refreshToken: body.aliyunRefreshToken,
+      updatedAt: Date.now(),
+    }
+  }
+
+  if (body.xunleiRefreshToken) {
+    config.xunlei = {
+      refreshToken: body.xunleiRefreshToken,
       updatedAt: Date.now(),
     }
   }

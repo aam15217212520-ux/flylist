@@ -1,4 +1,4 @@
-export type PanType = 'lanzou' | 'chengtong' | 'feiji' | 'pan123' | 'baidu' | 'quark' | 'gdrive' | 'ilanzou' | 'aliyun' | 'cloud189'
+export type PanType = 'lanzou' | 'chengtong' | 'feiji' | 'pan123' | 'baidu' | 'quark' | 'uc' | 'gdrive' | 'ilanzou' | 'aliyun' | 'cloud189' | 'xunlei'
 
 const HOST_RULES: Array<{ type: PanType; test: RegExp }> = [
   // ilanzou 规则要放在 lanzou 前面：lanzou 的正则没有锚定开头，会把 "ilanzou.com" 也误判成蓝奏云
@@ -9,6 +9,8 @@ const HOST_RULES: Array<{ type: PanType; test: RegExp }> = [
   { type: 'pan123', test: /123pan\.(com|cn)|123684\.com|123865\.com|123912\.com/i },
   { type: 'baidu', test: /pan\.baidu\.com|yun\.baidu\.com/i },
   { type: 'quark', test: /pan\.quark\.cn/i },
+  { type: 'uc', test: /drive\.uc\.cn|pan\.uc\.cn/i },
+  { type: 'xunlei', test: /pan\.xunlei\.com/i },
   { type: 'gdrive', test: /drive\.google\.com|docs\.google\.com/i },
   { type: 'aliyun', test: /alipan\.com|aliyundrive\.com/i },
   { type: 'cloud189', test: /cloud\.189\.cn|h5\.cloud\.189\.cn|m\.cloud\.189\.cn/i },
@@ -33,8 +35,10 @@ export const PAN_NAMES: Record<PanType, string> = {
   pan123: '123云盘',
   baidu: '百度网盘',
   quark: '夸克网盘',
+  uc: 'UC 网盘',
   gdrive: 'Google Drive',
   ilanzou: '蓝奏云优享版',
   aliyun: '阿里云盘',
   cloud189: '天翼云盘',
+  xunlei: '迅雷网盘',
 }

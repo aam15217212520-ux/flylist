@@ -7,10 +7,12 @@ import { parseFeiji } from './parsers/feiji'
 import { parsePan123 } from './parsers/pan123'
 import { parseBaidu, buildBaiduProxyLink } from './parsers/baidu'
 import { parseQuark, buildQuarkProxyLink } from './parsers/quark'
+import { parseUc, buildUcProxyLink } from './parsers/uc'
 import { parseGDrive, buildGDriveProxyLink } from './parsers/gdrive'
 import { parseIlanzou } from './parsers/ilanzou'
 import { parseAliyun, buildAliyunProxyLink } from './parsers/aliyun'
 import { parseCloud189 } from './parsers/cloud189'
+import { parseXunlei, buildXunleiProxyLink } from './parsers/xunlei'
 import { getCachedLink, setCachedLink } from './parsers/shared/cache'
 import { incrementStats } from './parsers/shared/stats'
 import { getSiteConfig } from './parsers/shared/config'
@@ -79,6 +81,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       case 'quark':
         result = await parseQuark({ env, url: body.url, pwd: body.pwd })
         break
+      case 'uc':
+        result = await parseUc({ env, url: body.url, pwd: body.pwd })
+        break
+      case 'xunlei':
+        result = await parseXunlei({ env, url: body.url, pwd: body.pwd })
+        break
       case 'gdrive':
         result = await parseGDrive({ env, url: body.url, pwd: body.pwd })
         break
@@ -102,12 +110,16 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     let responseLink = result.directLink
     if (panType === 'quark') {
       responseLink = buildQuarkProxyLink(result.directLink, result.fileName)
+    } else if (panType === 'uc') {
+      responseLink = buildUcProxyLink(result.directLink, result.fileName)
     } else if (panType === 'baidu') {
       responseLink = buildBaiduProxyLink(result.directLink, result.fileName)
     } else if (panType === 'gdrive') {
       responseLink = buildGDriveProxyLink(result.directLink, result.fileName)
     } else if (panType === 'aliyun') {
       responseLink = buildAliyunProxyLink(result.directLink, result.fileName)
+    } else if (panType === 'xunlei') {
+      responseLink = buildXunleiProxyLink(result.directLink, result.fileName)
     }
 
     await setCachedLink(env, cacheKey, responseLink)

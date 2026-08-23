@@ -71,6 +71,8 @@ npm run dev
 | 小飞机网盘 | 较低 | 服务较新，接口路径基于合理推测实现，上线后需要用真实分享链接验证，如有出入需要重新抓包 `functions/api/parsers/feiji.ts` |
 | 123云盘 | 中高 | 公开分享接口结构相对稳定，但仅覆盖普通文件，大文件/登录态场景未实现 |
 | 百度网盘 | 中高 | 采用官方微信端接口 `share/wxlist`（列表）+ `share/tplconfig`（签名）+ `api/sharedownload`（下载，需附带 `sekey`）三步获取直链，不依赖分享页 HTML 结构，支持文件夹分享，思路参考自 94list / HkList / baiduwp-php 等开源实现 |
+| UC 网盘 | 中 | 与夸克同源（`QuarkOrUC`），用 Cookie + `pc-api.uc.cn` + `pr=UCBrowser`，下载走 `/api/uc-download` 代理。端点从 alist 驱动对照写出，尚未用真实 Cookie 验证 |
+| 迅雷网盘 | 较低 | 需 refresh_token；分享走 restore 转存再取 `web_content_link`，下载走 `/api/xunlei-download`。captcha 目前用参考实现的硬编码签名，真实环境可能失效 |
 
 **建议**：部署后先用几个真实分享链接逐个网盘测试，任何一个解析失败都可以把报错信息发我，我们针对性修正对应 parser 文件即可，不影响其他网盘。
 
