@@ -65,6 +65,7 @@ export default function Admin() {
   const [ucMsg, setUcMsg] = useState('')
   const [xunleiRefreshToken, setXunleiRefreshToken] = useState('')
   const [xunleiMsg, setXunleiMsg] = useState('')
+  const [xunleiCmdCopied, setXunleiCmdCopied] = useState(false)
   const [stats, setStats] = useState<StatsData | null>(null)
   const [announcementContent, setAnnouncementContent] = useState('')
   const [announcementEnabled, setAnnouncementEnabled] = useState(false)
@@ -249,6 +250,27 @@ export default function Admin() {
       setXunleiRefreshToken('')
       loadConfig()
     }
+  }
+
+  const XUNLEI_TOKEN_CMD = `JSON.parse(localStorage.getItem('credentials_Xqp0kJBXWhwaTpB6')).refresh_token`
+
+  async function handleCopyXunleiCmd() {
+    try {
+      await navigator.clipboard.writeText(XUNLEI_TOKEN_CMD)
+    } catch {
+      // 非 HTTPS 或旧浏览器下 clipboard API 不可用，退回选中文本让用户自己复制
+      const el = document.getElementById('xunlei-token-cmd')
+      if (el) {
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      }
+      return
+    }
+    setXunleiCmdCopied(true)
+    setTimeout(() => setXunleiCmdCopied(false), 2000)
   }
 
   async function handleSaveAnnouncement() {
@@ -548,9 +570,32 @@ export default function Admin() {
           迅雷每次刷新都会轮换 refresh token 并立即作废旧值。请填入<b>最新</b>的一个；
           同时用浏览器登录迅雷网页版会与本站争抢同一条 token 链，导致解析间歇失效。
         </p>
-        <label className="block text-xs text-slate-400 mb-1">
-          Refresh Token（登录 pan.xunlei.com 后按 F12 → Application → Local Storage → 展开 <code className="text-slate-300">credentials_Xqp0kJBXWhwaTpB6</code> → 取其中的 refresh_token 字段）
-        </label>
+        <label className="block text-xs text-slate-400 mb-1">Refresh Token</label>
+        <div className="bg-black/40 border border-slate-700 rounded p-3 mb-3">
+          <p className="text-xs text-slate-400 mb-2">
+            获取方式：登录 pan.xunlei.com 后按 F12 打开 Console，粘贴下面这行执行，就会直接打印出 token：
+          </p>
+          <div className="flex items-start gap-2">
+            <code
+              id="xunlei-token-cmd"
+              className="flex-1 block bg-black/60 border border-slate-800 rounded px-2 py-1.5 text-[11px] leading-relaxed text-accent2 font-mono break-all select-all"
+            >
+              {XUNLEI_TOKEN_CMD}
+            </code>
+            <button
+              type="button"
+              onClick={handleCopyXunleiCmd}
+              className="shrink-0 px-2 py-1.5 rounded border border-accent/40 text-xs text-accent hover:bg-accent/10"
+            >
+              {xunleiCmdCopied ? '已复制 ✓' : '复制'}
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-2">
+            Chrome 首次在 Console 粘贴会要求先手动输入 <code className="text-slate-300">allow pasting</code> 并回车，输一次就行。
+            不想用命令的话，也可以走 F12 → Application → Local Storage → pan.xunlei.com → 展开{' '}
+            <code className="text-slate-300">credentials_Xqp0kJBXWhwaTpB6</code> → 取 refresh_token 字段。
+          </p>
+        </div>
         <input
           value={xunleiRefreshToken}
           onChange={(e) => setXunleiRefreshToken(e.target.value)}
