@@ -61,6 +61,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     return new Response(`百度网盘下载失败（上游状态码 ${upstreamRes.status}）`, { status: 502 })
   }
 
+  // 记录下载时间戳，供 /api/cleanup 判断「24 小时无人下载」后清理转存文件
+  env.FLYLIST_KV.put(`baidudl:${accountId}:${fsId}`, String(Date.now())).catch(() => {})
+
   const headers = new Headers()
   for (const h of PASSTHROUGH_RESPONSE_HEADERS) {
     const v = upstreamRes.headers.get(h)

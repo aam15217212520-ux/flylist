@@ -460,6 +460,9 @@ async function resolveDownload(
 
   const token = `${account.id}:${toFsId}`
   await setCachedTransfer(env, transferKey, token)
+  // 记录转存时间戳 + fsid→分享映射，供 /api/cleanup 判断「24 小时无人下载」后清理
+  await env.FLYLIST_KV.put(`baidudlts:${account.id}:${toFsId}`, String(Date.now()), { expirationTtl: 60 * 60 * 48 })
+  await env.FLYLIST_KV.put(`baidufsmap:${account.id}:${toFsId}`, surl, { expirationTtl: 60 * 60 * 48 })
 
   return {
     panType: 'baidu',
