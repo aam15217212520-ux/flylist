@@ -8,11 +8,13 @@ import { fetchJson } from './parsers/shared/http'
  * （如 cron-job.org、UptimeRobot 每 6/12 小时 GET 一次本地址）即可实现定时清理。
  *
  * 清理范围：
- *   1. 百度账号池各账号 /parse_file 目录下「超过 24 小时无人下载」的转存文件。
- *      转存文件会占满网盘空间导致后续转存失败（errno -8 空间不足），必须定期清理。
+ *   1. 百度账号池各账号 /parse_file 目录下「本站转存的、超过 24 小时无人下载」的文件。
+ *      转存文件会占满网盘空间导致后续转存失败（空间不足），必须定期清理。
  *      「24 小时无人下载」的判定依据：下载代理每次成功取流时会在 KV 记录
  *      `baidudl:<accountId>:<fsId>` = 时间戳；清理时对比该时间戳与转存时间，
  *      超过 24h 未被下载即删除。
+ *      安全护栏：只删 KV 里有本站转存/下载记录的文件；用户手动放进 /parse_file
+ *      的私人文件（KV 无记录）绝不删除。
  *   2. KV 中对应的转存缓存（baidutransfer:*）一并删除，避免命中已删除文件的缓存。
  */
 
@@ -95,16 +97,16 @@ export const onRequestGet: PagesFunction<Env> = async ({ env }) => {
         for (const file of files) {
           if (Number(file.isdir) === 1) continue
           const fsId = String(file.fs_id)
-          // 下载代理每次成功取流都会刷新这个 key 的时间戳
+          // 安全护栏：只删本站自己转存的文件。判定依据是 KV 里存在本站写入的
+          // baidudlts（转存时间戳）或 baidudl（下载时间戳）记录；两者都没有说明
+          // 这个文件不是本站转存的（可能是用户自己手动放进 /parse_file 的私人文件），绝不删除
           const lastDownload = await env.FLYLIST_KV.get(`baidudl:${account.id}:${fsId}`)
+          const transferTs = await env.FLYLIST_KV.get(`baidudlts:${account.id}:${fsId}`)
+          if (!lastDownload && !transferTs) continue
           const lastUsed = lastDownload ? Number(lastDownload) : 0
-          // 从未下载过的文件以「文件在网盘里的修改时间」近似转存时间不可得，
-          // 因此用 KV 里转存缓存的写入时间兜底：查不到下载记录且查不到缓存时跳过（保守不删）
-          if (!lastUsed) {
-            const transferTs = await env.FLYLIST_KV.get(`baidudlts:${account.id}:${fsId}`)
-            if (!transferTs) continue
-            if (now - Number(transferTs) < UNUSED_AFTER_MS) continue
-          } else if (now - lastUsed < UNUSED_AFTER_MS) {
+          if (lastUsed) {
+            if (now - lastUsed < UNUSED_AFTER_MS) continue
+          } else if (now - Number(transferTs) < UNUSED_AFTER_MS) {
             continue
           }
           toDelete.push(file.path)
