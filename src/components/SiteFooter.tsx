@@ -8,7 +8,7 @@ export default function Footer() {
   return (
     <footer className="mt-16 text-center text-xs text-slate-500 font-mono space-y-1">
       <p>本站遵循免费公益交流学习，从未用于商业用途</p>
-      <p>© 2026 网盘解析专家. 保留所有权利.</p>
+      <p>© KeLe Studio &amp; FlyAi Studio</p>
       <p className="flex items-center justify-center gap-4 pt-2 text-sm">
         <button onClick={() => setModal('agreement')} className="text-slate-400 hover:text-accent2 transition-colors">
           服务条款
