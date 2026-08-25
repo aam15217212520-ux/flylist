@@ -525,12 +525,15 @@ export async function resolveBaiduFinalUrl(env: Env, accountId: string, toFsId: 
   return finalUrl
 }
 
-/** 把“账号 + 转存文件”复合令牌包装成前端可直接点击的下载代理地址，账号 Cookie 始终留在服务端。 */
+/** 把“账号 + 转存文件”复合令牌包装成前端可直接点击的下载代理地址，账号 Cookie 始终留在服务端。
+ * 文件名放在路径末段（/api/baidu-download/xxx.mov?...），IDM 等下载工具建任务时
+ * 优先看 URL 路径而不是 Content-Disposition，路径带真实文件名才能正确命名。 */
 export function buildBaiduProxyLink(rawToken: string, fileName?: string): string {
   const [accountId, toFsId] = rawToken.split(':')
   const params = new URLSearchParams({ accountId, fsId: toFsId })
   if (fileName) {
     params.set('name', fileName)
   }
-  return `/api/baidu-download?${params.toString()}`
+  const safeName = fileName?.trim() ? fileName.trim().replace(/[/\\]/g, '_') : 'download.bin'
+  return `/api/baidu-download/${encodeURIComponent(safeName)}?${params.toString()}`
 }

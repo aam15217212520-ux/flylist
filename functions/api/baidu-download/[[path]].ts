@@ -30,7 +30,10 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const reqUrl = new URL(request.url)
   const accountId = reqUrl.searchParams.get('accountId')
   const fsId = reqUrl.searchParams.get('fsId')
-  const filename = reqUrl.searchParams.get('name')
+  // 文件名优先取路径末段（/api/baidu-download/xxx.mov?...），IDM 等下载工具
+  // 建任务时优先看 URL 路径而不是 Content-Disposition，路径带真实文件名才能正确命名
+  const pathName = decodeURIComponent(reqUrl.pathname.split('/').pop() ?? '')
+  const filename = pathName.includes('.') ? pathName : reqUrl.searchParams.get('name')
 
   if (!accountId || !fsId || !isPlausibleId(accountId) || !isPlausibleId(fsId)) {
     return new Response('invalid params', { status: 400 })
