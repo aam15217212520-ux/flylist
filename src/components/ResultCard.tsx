@@ -3,9 +3,11 @@ import type { ParseResult } from '../lib/api'
 interface Props {
   result: ParseResult
   onSelectFolderFile?: (url: string) => void
+  /** 百度网盘：点击下载时不直接跳转，而是弹出 IDM 配置弹窗 */
+  onBaiduDownload?: (fileName: string | undefined, directLink: string) => void
 }
 
-export default function ResultCard({ result, onSelectFolderFile }: Props) {
+export default function ResultCard({ result, onSelectFolderFile, onBaiduDownload }: Props) {
 
   if (!result.success || !result.data) {
     if (result.isFolder && result.folder) {
@@ -52,7 +54,9 @@ export default function ResultCard({ result, onSelectFolderFile }: Props) {
     )
   }
 
-  const { panName, fileName, fileSize, directLink, cacheHit } = result.data
+  const { panType, panName, fileName, fileSize, directLink, cacheHit } = result.data
+
+  const isBaidu = panType === 'baidu'
 
   return (
     <div className="mt-4 border border-accent/30 bg-black/30 rounded px-4 py-3 text-sm space-y-2">
@@ -61,14 +65,23 @@ export default function ResultCard({ result, onSelectFolderFile }: Props) {
       </p>
       {fileName && <p className="text-slate-300 truncate">文件名：{fileName}</p>}
       {fileSize && <p className="text-slate-500 text-xs">大小：{fileSize}</p>}
-      <a
-        href={directLink}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-block mt-2 px-4 py-1.5 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan"
-      >
-        立即下载 ↓
-      </a>
+      {isBaidu ? (
+        <button
+          onClick={() => onBaiduDownload?.(fileName, directLink)}
+          className="inline-block mt-2 px-4 py-1.5 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan"
+        >
+          获取下载链接 ↓
+        </button>
+      ) : (
+        <a
+          href={directLink}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block mt-2 px-4 py-1.5 rounded bg-accent2 text-black font-bold hover:shadow-glowCyan"
+        >
+          立即下载 ↓
+        </a>
+      )}
     </div>
   )
 }

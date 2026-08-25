@@ -4,6 +4,7 @@ import { ParseError } from './shared/types'
 import type { BaiduAccount } from './shared/config'
 import { getSiteConfig } from './shared/config'
 import { pickBaiduAccount, markBaiduAccountUsed, markBaiduAccountFailed, markBaiduAccountDirReady } from './shared/baiduPool'
+import { getCachedTransfer, setCachedTransfer } from './shared/cache'
 
 interface WxListItem {
   isdir: number | string
@@ -402,9 +403,10 @@ async function transferToOwnDrive(
   return { toPath: String(item.to), toFsId: String(item.to_fs_id) }
 }
 
-/** 百度网盘要求下载请求方 User-Agent 精确等于此值才会放行（换成浏览器/curl 等常见 UA 会被判定
- * 为未授权，返回 403 hitcode:119）。这个值只在服务端内部请求百度时使用，不会暴露给访客。 */
-export const BAIDU_DOWNLOAD_UA = 'pan.baidu.com'
+/** 百度网盘下载请求 UA。实测（2026-08）：CDN 直链严格校验 UA 与签发时一致，
+ * App 客户端 UA（netdisk;P2SP）签出的直链不绑 IP、不需 Cookie、可重复请求，
+ * 风控比网页版 UA 宽松。访客通过 IDM 等工具下载时也必须填这个 UA。 */
+export const BAIDU_DOWNLOAD_UA = 'netdisk;P2SP;3.0.20.138'
 
 async function resolveDownload(
   env: Env,
@@ -420,6 +422,25 @@ async function resolveDownload(
   const bdstoken = await getOwnBdsToken(cookie)
 
   await ensureParseDir(env, account, cookie, bdstoken)
+
+  // 转存结果缓存：同一分享文件 24h 内复用上次的转存，不再重复调 transfer 接口。
+  // 高频转存他人分享是百度风控的重点监控行为，这是降低封号风险最有效的一层。
+  // 注意缓存的是「账号 + 转存后文件」，账号失效时缓存作废（resolveBaiduFinalUrl 会报错重解析）。
+  const transferKey = `baidutransfer:${surl}:${fsId}`
+  const cachedTransfer = await getCachedTransfer(env, transferKey)
+  if (cachedTransfer) {
+    const [cachedAccount] = cachedTransfer.split(':')
+    const configNow = await getSiteConfig(env)
+    const stillExists = (configNow.baiduAccounts ?? []).some((a) => a.id === cachedAccount && a.status === 'normal')
+    if (stillExists) {
+      return {
+        panType: 'baidu',
+        panName: '百度网盘',
+        fileName: fallbackName?.trim() || undefined,
+        directLink: cachedTransfer,
+      }
+    }
+  }
 
   const randsk = decodeSecKey(seckey)
   const { toPath, toFsId } = await transferToOwnDrive(
@@ -437,15 +458,16 @@ async function resolveDownload(
   // 避免访客下载时因为拿不到文件名，被浏览器/下载管理器猜成 .bin 后缀
   const resolvedName = fallbackName?.trim() || toPath.split('/').pop() || undefined
 
+  const token = `${account.id}:${toFsId}`
+  await setCachedTransfer(env, transferKey, token)
+
   return {
     panType: 'baidu',
     panName: '百度网盘',
     fileName: resolvedName,
-    // 复合令牌，不是真实直链：真正的 CDN 签名直链要求“签发时的请求 IP”与“下载时的请求 IP”一致，
-    // 因此不能在这里提前签发直链交给访客浏览器（浏览器出口 IP 和我方服务器不同，会被百度判定 sign error 拒绝）。
-    // 这里只记录“哪个账号 + 转存到该账号下的哪个文件”，实际签发直链推迟到访客点击下载、
-    // 命中 /api/baidu-download 代理的那一刻才现场生成，并在同一次请求里立刻使用，从而保证 IP 一致。
-    directLink: `${account.id}:${toFsId}`,
+    // 复合令牌，不是真实直链：记录“哪个账号 + 转存到该账号下的哪个文件”。
+    // 实际签发直链推迟到访客点击下载、命中 /api/baidu-download 代理的那一刻才现场生成。
+    directLink: token,
   }
 }
 
@@ -473,7 +495,7 @@ export async function resolveBaiduFinalUrl(env: Env, accountId: string, toFsId: 
 
   const metaRes = await fetchJson<FileMetasResp>(
     `https://pan.baidu.com/api/filemetas?dlink=1&fsids=%5B${toFsId}%5D&app_id=250528&channel=chunlei&web=1&clienttype=0&bdstoken=${encodeURIComponent(bdstoken)}`,
-    { headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home' } },
+    { headers: { Cookie: cookie, Referer: 'https://pan.baidu.com/disk/home', 'User-Agent': BAIDU_DOWNLOAD_UA } },
   )
 
   const dlink = metaRes.info?.[0]?.dlink

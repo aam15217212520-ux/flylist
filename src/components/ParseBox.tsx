@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { parseShareLink, type ParseResult } from '../lib/api'
 import ResultCard from './ResultCard'
+import BaiduDownloadModal from './BaiduDownloadModal'
 
 interface Props {
   onOpenAgreement: () => void
@@ -12,6 +13,7 @@ export default function ParseBox({ onOpenAgreement }: Props) {
   const [agreed, setAgreed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ParseResult | null>(null)
+  const [baiduModal, setBaiduModal] = useState<{ fileName?: string; directLink: string } | null>(null)
 
   const canSubmit = agreed && url.trim().length > 0 && !loading
 
@@ -96,7 +98,20 @@ export default function ParseBox({ onOpenAgreement }: Props) {
         {loading ? '解析中...' : '开始解析 ⚡'}
       </button>
 
-      {result && <ResultCard result={result} onSelectFolderFile={handleSelectFolderFile} />}
+      {result && (
+        <ResultCard
+          result={result}
+          onSelectFolderFile={handleSelectFolderFile}
+          onBaiduDownload={(fileName, directLink) => setBaiduModal({ fileName, directLink })}
+        />
+      )}
+      <BaiduDownloadModal
+        open={Boolean(baiduModal)}
+        fileName={baiduModal?.fileName}
+        directLink={baiduModal?.directLink ?? ''}
+        ua="netdisk;P2SP;3.0.20.138"
+        onClose={() => setBaiduModal(null)}
+      />
     </div>
   )
 }
