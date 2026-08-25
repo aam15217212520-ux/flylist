@@ -102,7 +102,13 @@ export default function ParseBox({ onOpenAgreement }: Props) {
         <ResultCard
           result={result}
           onSelectFolderFile={handleSelectFolderFile}
-          onBaiduDownload={(fileName, directLink) => setBaiduModal({ fileName, directLink })}
+          onBaiduDownload={(fileName, directLink) =>
+            setBaiduModal({
+              fileName,
+              // directLink 是相对路径的代理地址（/api/baidu-download?...），补全为绝对 URL 才能复制到 IDM 使用
+              directLink: new URL(directLink, window.location.origin).href,
+            })
+          }
         />
       )}
       <BaiduDownloadModal
