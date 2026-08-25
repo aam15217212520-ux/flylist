@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import ParseBox from '../components/ParseBox'
-import AgreementModal from '../components/AgreementModal'
 import Announcement from '../components/Announcement'
+import SiteFooter from '../components/SiteFooter'
 
 const SUPPORTED_PANS = [
   { key: 'lanzou', name: '蓝奏云' },
@@ -47,29 +47,7 @@ export default function Home() {
         ))}
       </div>
 
-      <footer className="mt-16 text-center text-xs text-slate-500 font-mono space-y-1">
-        <p>
-          使用本站即代表您同意{' '}
-          <button
-            onClick={() => setAgreementOpen(true)}
-            className="text-accent2 underline underline-offset-2 hover:text-accent"
-          >
-            《FlyList 访客协议》
-          </button>
-        </p>
-        <p>本站不存储任何文件，所有直链均来自网盘官方接口临时授权 · 仅供学习交流</p>
-        <p className="flex items-center justify-center gap-1.5 pt-1">
-          <img src="/logo-kele.png" alt="KeLe Studio" className="h-4 w-4" />
-          Powered by FlyAi Studio &amp; KeLe Studio
-        </p>
-        <p className="pt-2">
-          <a href="/admin" className="hover:text-accent2">
-            管理后台 →
-          </a>
-        </p>
-      </footer>
-
-      <AgreementModal open={agreementOpen} onClose={() => setAgreementOpen(false)} />
+      <SiteFooter />
     </div>
   )
 }
